@@ -1,4 +1,4 @@
-package workflows
+package testdata
 
 import (
 	"math/rand"
@@ -6,7 +6,11 @@ import (
 	"go.uber.org/cadence/workflow"
 )
 
-func AnotherWorkflow(ctx workflow.Context) error {
-	_ = rand.Intn(10) // Nondeterministic
+func NotAWorkflow() {
+	_ = rand.Intn(10) // should NOT be flagged
+}
+
+func RandomnessInWorkflow(ctx workflow.Context) error {
+	_ = rand.Intn(10) // should be flagged
 	return nil
 }

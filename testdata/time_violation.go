@@ -1,4 +1,4 @@
-package workflows
+package testdata
 
 import (
 	"time"
@@ -6,7 +6,11 @@ import (
 	"go.uber.org/cadence/workflow"
 )
 
-func ExampleWorkflow(ctx workflow.Context) error {
-	_ = time.Now() // Not allowed – non-deterministic
+func ValidActivity() {
+	_ = time.Now() // should NOT be flagged
+}
+
+func MyWorkflow(ctx workflow.Context) error {
+	_ = time.Now() // should be flagged
 	return nil
 }
