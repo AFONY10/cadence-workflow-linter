@@ -10,34 +10,41 @@ import (
 
 	"github.com/afony10/cadence-workflow-linter/analyzer"
 	"github.com/afony10/cadence-workflow-linter/analyzer/detectors"
+	"github.com/afony10/cadence-workflow-linter/config"
 
 	"go/ast"
 )
 
 func main() {
+	// Command-line flags
 	var format string
+	var rulesPath string
 	flag.StringVar(&format, "format", "json", "output format: json|yaml")
+	flag.StringVar(&rulesPath, "rules", "config/rules.yaml", "path to rules yaml")
 	flag.Parse()
 
 	if flag.NArg() < 1 {
-		fmt.Println("Usage: cadence-workflow-linter [--format json|yaml] <file_or_directory>")
+		fmt.Println("Usage: cadence-workflow-linter [--format json|yaml] [--rules path] <file_or_directory>")
 		os.Exit(1)
 	}
 
 	target := flag.Arg(0)
 
-	// Factory creates fresh detectors per file
+	rules, err := config.LoadRules(rulesPath)
+	if err != nil {
+		fmt.Println("Error loading rules:", err)
+		os.Exit(1)
+	}
+
+	// Factory returns fresh visitors per file using config
 	factory := func() []ast.Visitor {
 		return []ast.Visitor{
-			detectors.NewTimeUsageDetector(),
-			detectors.NewRandomnessDetector(),
-			detectors.NewIOCallsDetector(),
+			detectors.NewFuncCallDetector(rules.FunctionCalls),
+			detectors.NewImportDetector(rules.DisallowedImports),
 		}
 	}
 
 	var issues []detectors.Issue
-	var err error
-
 	info, statErr := os.Stat(target)
 	if statErr != nil {
 		fmt.Println("Error:", statErr)
@@ -62,7 +69,7 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Print(string(out))
-	default: // json
+	default:
 		out, mErr := json.MarshalIndent(issues, "", "  ")
 		if mErr != nil {
 			fmt.Println("Marshal error:", mErr)

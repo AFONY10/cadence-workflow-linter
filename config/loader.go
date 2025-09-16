@@ -1,0 +1,37 @@
+package config
+
+import (
+	"os"
+
+	"gopkg.in/yaml.v3"
+)
+
+type FunctionRule struct {
+	Rule      string   `yaml:"rule"`
+	Package   string   `yaml:"package"`   // import path (e.g., "time", "math/rand", "fmt", "os")
+	Functions []string `yaml:"functions"` // selector names
+	Message   string   `yaml:"message"`
+}
+
+type ImportRule struct {
+	Rule    string `yaml:"rule"`
+	Path    string `yaml:"path"`    // import path
+	Message string `yaml:"message"` // message if path is present in file with workflows
+}
+
+type RuleSet struct {
+	FunctionCalls     []FunctionRule `yaml:"function_calls"`
+	DisallowedImports []ImportRule   `yaml:"disallowed_imports"`
+}
+
+func LoadRules(path string) (*RuleSet, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var rs RuleSet
+	if err := yaml.Unmarshal(b, &rs); err != nil {
+		return nil, err
+	}
+	return &rs, nil
+}

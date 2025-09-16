@@ -5,13 +5,18 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/afony10/cadence-workflow-linter/analyzer/detectors"
 	"github.com/afony10/cadence-workflow-linter/analyzer/registry"
+	"github.com/afony10/cadence-workflow-linter/config"
 )
 
-func parseAndWalk(t *testing.T, rel string, v ast.Visitor) []detectors.Issue {
+// --- Helpers ---------------------------------------------------------------
+
+func parse(t *testing.T, rel string) (*token.FileSet, *ast.File, string) {
+	t.Helper()
 	filename := "../testdata/" + rel
 
 	src, err := os.ReadFile(filename)
@@ -24,8 +29,32 @@ func parseAndWalk(t *testing.T, rel string, v ast.Visitor) []detectors.Issue {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
+	return fset, node, filename
+}
 
-	// Build workflow registry and inject contexts
+func importMapFromFile(node *ast.File) map[string]string {
+	m := make(map[string]string)
+	for _, imp := range node.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		var alias string
+		if imp.Name != nil && imp.Name.Name != "" && imp.Name.Name != "_" && imp.Name.Name != "." {
+			alias = imp.Name.Name
+		} else {
+			// default alias = last path segment
+			if i := strings.LastIndex(path, "/"); i >= 0 {
+				alias = path[i+1:]
+			} else {
+				alias = path
+			}
+		}
+		m[alias] = path
+	}
+	return m
+}
+
+func walk(t *testing.T, v ast.Visitor, fset *token.FileSet, node *ast.File, filename string) []detectors.Issue {
+	t.Helper()
+
 	reg := registry.NewWorkflowRegistry()
 	ast.Walk(reg, node)
 
@@ -33,7 +62,11 @@ func parseAndWalk(t *testing.T, rel string, v ast.Visitor) []detectors.Issue {
 		wa.SetWorkflowRegistry(reg)
 	}
 	if fca, ok := v.(detectors.FileContextAware); ok {
-		fca.SetFileContext(filename, fset)
+		fca.SetFileContext(detectors.FileContext{
+			File:      filename,
+			Fset:      fset,
+			ImportMap: importMapFromFile(node),
+		})
 	}
 
 	ast.Walk(v, node)
@@ -44,23 +77,55 @@ func parseAndWalk(t *testing.T, rel string, v ast.Visitor) []detectors.Issue {
 	return nil
 }
 
-func TestTimeUsageDetector(t *testing.T) {
-	issues := parseAndWalk(t, "time_violation.go", detectors.NewTimeUsageDetector())
-	if len(issues) == 0 {
-		t.Fatalf("expected at least one time usage issue inside workflow")
+// --- Tests -----------------------------------------------------------------
+
+func TestFuncCallDetector_TimeRandAndIO(t *testing.T) {
+	rules, err := config.LoadRules("../config/rules.yaml")
+	if err != nil {
+		t.Fatalf("load rules: %v", err)
+	}
+
+	// time_violation.go → expect a TimeUsage issue
+	{
+		fset, node, file := parse(t, "time_violation.go")
+		d := detectors.NewFuncCallDetector(rules.FunctionCalls)
+		issues := walk(t, d, fset, node, file)
+		if len(issues) == 0 {
+			t.Fatalf("expected at least one TimeUsage issue in %s", file)
+		}
+	}
+
+	// rand_violation.go → expect a Randomness issue
+	{
+		fset, node, file := parse(t, "rand_violation.go")
+		d := detectors.NewFuncCallDetector(rules.FunctionCalls)
+		issues := walk(t, d, fset, node, file)
+		if len(issues) == 0 {
+			t.Fatalf("expected at least one Randomness issue in %s", file)
+		}
+	}
+
+	// io_violation.go → expect an IOCalls issue
+	{
+		fset, node, file := parse(t, "io_violation.go")
+		d := detectors.NewFuncCallDetector(rules.FunctionCalls)
+		issues := walk(t, d, fset, node, file)
+		if len(issues) == 0 {
+			t.Fatalf("expected at least one IOCalls issue in %s", file)
+		}
 	}
 }
 
-func TestRandomnessDetector(t *testing.T) {
-	issues := parseAndWalk(t, "rand_violation.go", detectors.NewRandomnessDetector())
-	if len(issues) == 0 {
-		t.Fatalf("expected at least one randomness issue inside workflow")
+func TestImportDetector_Rand(t *testing.T) {
+	rules, err := config.LoadRules("../config/rules.yaml")
+	if err != nil {
+		t.Fatalf("load rules: %v", err)
 	}
-}
 
-func TestIOCallsDetector(t *testing.T) {
-	issues := parseAndWalk(t, "io_violation.go", detectors.NewIOCallsDetector())
+	fset, node, file := parse(t, "rand_violation.go")
+	d := detectors.NewImportDetector(rules.DisallowedImports)
+	issues := walk(t, d, fset, node, file)
 	if len(issues) == 0 {
-		t.Fatalf("expected at least one IO/logging issue inside workflow")
+		t.Fatalf("expected at least one ImportRandom issue in %s", file)
 	}
 }

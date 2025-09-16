@@ -1,0 +1,25 @@
+function_calls:
+  - rule: TimeUsage
+    package: time
+    functions: [Now, Since]
+    message: "Detected time.%FUNC%() in workflow. Use workflow.Now(ctx)/workflow.Sleep(ctx) instead."
+
+  - rule: Randomness
+    package: math/rand
+    functions: [Intn, Int, Float32, Float64, Read]
+    message: "Detected rand.%FUNC%() in workflow. Avoid nondeterminism; use workflow.SideEffect if needed."
+
+  - rule: IOCalls
+    package: os
+    functions: [Open, OpenFile, ReadFile, WriteFile, Mkdir, Remove]
+    message: "Detected os.%FUNC%() in workflow. Avoid file I/O inside workflows."
+
+  - rule: IOCalls
+    package: fmt
+    functions: [Println, Printf, Print]
+    message: "Detected fmt.%FUNC%() in workflow. Use workflow.GetLogger(ctx) instead."
+
+disallowed_imports:
+  - rule: ImportRandom
+    path: math/rand
+    message: "Importing math/rand in files with workflows is discouraged; consider deterministic alternatives."

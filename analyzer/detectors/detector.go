@@ -6,7 +6,6 @@ import (
 	"github.com/afony10/cadence-workflow-linter/analyzer/registry"
 )
 
-// Issue is a structured finding your CLI can serialize.
 type Issue struct {
 	File    string `json:"file" yaml:"file"`
 	Line    int    `json:"line" yaml:"line"`
@@ -15,19 +14,20 @@ type Issue struct {
 	Message string `json:"message" yaml:"message"`
 }
 
-// WorkflowAware detectors need the workflow registry to know
-// whether we're inside a workflow function.
 type WorkflowAware interface {
 	SetWorkflowRegistry(reg *registry.WorkflowRegistry)
 }
 
-// FileContextAware detectors need to compute positions (line/col)
-// from the file set and include the file path in issues.
-type FileContextAware interface {
-	SetFileContext(file string, fset *token.FileSet)
+type FileContext struct {
+	File      string
+	Fset      *token.FileSet
+	ImportMap map[string]string // alias -> import path (e.g. "rand" -> "math/rand")
 }
 
-// IssueProvider exposes collected issues after a Walk.
+type FileContextAware interface {
+	SetFileContext(ctx FileContext)
+}
+
 type IssueProvider interface {
 	Issues() []Issue
 }
