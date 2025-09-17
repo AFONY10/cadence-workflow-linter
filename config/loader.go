@@ -10,13 +10,15 @@ type FunctionRule struct {
 	Rule      string   `yaml:"rule"`
 	Package   string   `yaml:"package"`   // import path (e.g., "time", "math/rand", "fmt", "os")
 	Functions []string `yaml:"functions"` // selector names
+	Severity  string   `yaml:"severity"`  // e.g., "error", "warning"
 	Message   string   `yaml:"message"`
 }
 
 type ImportRule struct {
-	Rule    string `yaml:"rule"`
-	Path    string `yaml:"path"`    // import path
-	Message string `yaml:"message"` // message if path is present in file with workflows
+	Rule     string `yaml:"rule"`
+	Severity string `yaml:"severity"` // e.g., "error", "warning"
+	Path     string `yaml:"path"`     // import path
+	Message  string `yaml:"message"`  // message if path is present in file with workflows
 }
 
 type RuleSet struct {

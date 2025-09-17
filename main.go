@@ -41,6 +41,8 @@ func main() {
 		return []ast.Visitor{
 			detectors.NewFuncCallDetector(rules.FunctionCalls),
 			detectors.NewImportDetector(rules.DisallowedImports),
+			detectors.NewGoroutineDetector(),
+			detectors.NewChannelDetector(),
 		}
 	}
 

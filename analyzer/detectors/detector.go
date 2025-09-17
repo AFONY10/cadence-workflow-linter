@@ -7,11 +7,12 @@ import (
 )
 
 type Issue struct {
-	File    string `json:"file" yaml:"file"`
-	Line    int    `json:"line" yaml:"line"`
-	Column  int    `json:"column" yaml:"column"`
-	Rule    string `json:"rule" yaml:"rule"`
-	Message string `json:"message" yaml:"message"`
+	File     string `json:"file" yaml:"file"`
+	Line     int    `json:"line" yaml:"line"`
+	Column   int    `json:"column" yaml:"column"`
+	Rule     string `json:"rule" yaml:"rule"`
+	Severity string `json:"severity" yaml:"severity"`
+	Message  string `json:"message" yaml:"message"`
 }
 
 type WorkflowAware interface {

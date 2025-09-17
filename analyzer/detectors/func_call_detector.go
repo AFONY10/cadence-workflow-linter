@@ -73,11 +73,12 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 				pos := d.ctx.Fset.Position(n.Sel.Pos())
 				msg := strings.ReplaceAll(rule.Message, "%FUNC%", funcName)
 				d.issues = append(d.issues, Issue{
-					File:    d.ctx.File,
-					Line:    pos.Line,
-					Column:  pos.Column,
-					Rule:    rule.Rule,
-					Message: msg,
+					File:     d.ctx.File,
+					Line:     pos.Line,
+					Column:   pos.Column,
+					Rule:     rule.Rule,
+					Severity: rule.Severity,
+					Message:  msg,
 				})
 			}
 		}

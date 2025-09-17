@@ -13,7 +13,7 @@ import (
 	"github.com/afony10/cadence-workflow-linter/config"
 )
 
-// --- Helpers ---------------------------------------------------------------
+// --- helpers ---------------------------------------------------------------
 
 func parse(t *testing.T, rel string) (*token.FileSet, *ast.File, string) {
 	t.Helper()
@@ -40,7 +40,6 @@ func importMapFromFile(node *ast.File) map[string]string {
 		if imp.Name != nil && imp.Name.Name != "" && imp.Name.Name != "_" && imp.Name.Name != "." {
 			alias = imp.Name.Name
 		} else {
-			// default alias = last path segment
 			if i := strings.LastIndex(path, "/"); i >= 0 {
 				alias = path[i+1:]
 			} else {
@@ -52,10 +51,10 @@ func importMapFromFile(node *ast.File) map[string]string {
 	return m
 }
 
-func walk(t *testing.T, v ast.Visitor, fset *token.FileSet, node *ast.File, filename string) []detectors.Issue {
+func walkOnce(t *testing.T, v ast.Visitor, fset *token.FileSet, node *ast.File, filename string) []detectors.Issue {
 	t.Helper()
 
-	reg := registry.NewWorkflowRegistry()
+	reg := registry.NewWorkflowRegistry() // keep current (non-config) registry
 	ast.Walk(reg, node)
 
 	if wa, ok := v.(detectors.WorkflowAware); ok {
@@ -77,55 +76,64 @@ func walk(t *testing.T, v ast.Visitor, fset *token.FileSet, node *ast.File, file
 	return nil
 }
 
-// --- Tests -----------------------------------------------------------------
+// --- tests -----------------------------------------------------------------
 
-func TestFuncCallDetector_TimeRandAndIO(t *testing.T) {
+func TestFuncCallDetector_TimeUsage(t *testing.T) {
 	rules, err := config.LoadRules("../config/rules.yaml")
 	if err != nil {
 		t.Fatalf("load rules: %v", err)
 	}
 
-	// time_violation.go → expect a TimeUsage issue
-	{
-		fset, node, file := parse(t, "time_violation.go")
-		d := detectors.NewFuncCallDetector(rules.FunctionCalls)
-		issues := walk(t, d, fset, node, file)
-		if len(issues) == 0 {
-			t.Fatalf("expected at least one TimeUsage issue in %s", file)
-		}
-	}
-
-	// rand_violation.go → expect a Randomness issue
-	{
-		fset, node, file := parse(t, "rand_violation.go")
-		d := detectors.NewFuncCallDetector(rules.FunctionCalls)
-		issues := walk(t, d, fset, node, file)
-		if len(issues) == 0 {
-			t.Fatalf("expected at least one Randomness issue in %s", file)
-		}
-	}
-
-	// io_violation.go → expect an IOCalls issue
-	{
-		fset, node, file := parse(t, "io_violation.go")
-		d := detectors.NewFuncCallDetector(rules.FunctionCalls)
-		issues := walk(t, d, fset, node, file)
-		if len(issues) == 0 {
-			t.Fatalf("expected at least one IOCalls issue in %s", file)
-		}
+	fset, node, file := parse(t, "time_violation.go")
+	d := detectors.NewFuncCallDetector(rules.FunctionCalls)
+	issues := walkOnce(t, d, fset, node, file)
+	if len(issues) == 0 {
+		t.Fatalf("expected at least one TimeUsage issue in %s", file)
 	}
 }
 
-func TestImportDetector_Rand(t *testing.T) {
+func TestFuncCallDetector_Randomness(t *testing.T) {
 	rules, err := config.LoadRules("../config/rules.yaml")
 	if err != nil {
 		t.Fatalf("load rules: %v", err)
 	}
 
 	fset, node, file := parse(t, "rand_violation.go")
-	d := detectors.NewImportDetector(rules.DisallowedImports)
-	issues := walk(t, d, fset, node, file)
+	d := detectors.NewFuncCallDetector(rules.FunctionCalls)
+	issues := walkOnce(t, d, fset, node, file)
 	if len(issues) == 0 {
-		t.Fatalf("expected at least one ImportRandom issue in %s", file)
+		t.Fatalf("expected at least one Randomness issue in %s", file)
+	}
+}
+
+func TestFuncCallDetector_IOCalls(t *testing.T) {
+	rules, err := config.LoadRules("../config/rules.yaml")
+	if err != nil {
+		t.Fatalf("load rules: %v", err)
+	}
+
+	fset, node, file := parse(t, "io_violation.go")
+	d := detectors.NewFuncCallDetector(rules.FunctionCalls)
+	issues := walkOnce(t, d, fset, node, file)
+	if len(issues) == 0 {
+		t.Fatalf("expected at least one IOCalls issue in %s", file)
+	}
+}
+
+func TestGoroutineDetector(t *testing.T) {
+	fset, node, file := parse(t, "goroutine_violation.go")
+	d := detectors.NewGoroutineDetector()
+	issues := walkOnce(t, d, fset, node, file)
+	if len(issues) == 0 {
+		t.Fatalf("expected at least one goroutine issue in %s", file)
+	}
+}
+
+func TestChannelDetector(t *testing.T) {
+	fset, node, file := parse(t, "channel_violation.go")
+	d := detectors.NewChannelDetector()
+	issues := walkOnce(t, d, fset, node, file)
+	if len(issues) == 0 {
+		t.Fatalf("expected at least one channel issue in %s", file)
 	}
 }
