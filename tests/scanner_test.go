@@ -137,3 +137,18 @@ func TestChannelDetector(t *testing.T) {
 		t.Fatalf("expected at least one channel issue in %s", file)
 	}
 }
+
+func TestActivityNotFlagged(t *testing.T) {
+	rules, err := config.LoadRules("../config/rules.yaml")
+	if err != nil {
+		t.Fatalf("load rules: %v", err)
+	}
+
+	fset, node, file := parse(t, "activity_ok.go")
+	d := detectors.NewFuncCallDetector(rules.FunctionCalls)
+	issues := walkOnce(t, d, fset, node, file)
+
+	if len(issues) != 0 {
+		t.Fatalf("expected 0 issues in activities, got %d", len(issues))
+	}
+}

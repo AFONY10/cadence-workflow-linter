@@ -53,8 +53,14 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 
 	case *ast.SelectorExpr:
 		// Only flag if inside known workflow function
-		if d.wr != nil && !d.wr.WorkflowFuncs[d.currFunc] {
-			return d
+		if d.wr != nil {
+			if !d.wr.WorkflowFuncs[d.currFunc] {
+				return d // skip if not a workflow function
+			}
+
+			if d.wr.ActivityFuncs[d.currFunc] {
+				return d // skip if activity function
+			}
 		}
 		ident, ok := n.X.(*ast.Ident)
 		if !ok {

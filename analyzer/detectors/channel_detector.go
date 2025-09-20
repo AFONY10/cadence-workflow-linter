@@ -35,10 +35,17 @@ func (d *ChannelDetector) Visit(node ast.Node) ast.Visitor {
 	case *ast.CallExpr:
 		// Look for make(chan ...)
 		if ident, ok := n.Fun.(*ast.Ident); ok && ident.Name == "make" {
+			// Only flag if inside known workflow function
 			if len(n.Args) > 0 {
+				// Check if the first argument is a channel type
 				if _, ok := n.Args[0].(*ast.ChanType); ok {
-					if d.wr != nil && !d.wr.WorkflowFuncs[d.currFunc] {
-						return d
+					if d.wr != nil {
+						if !d.wr.WorkflowFuncs[d.currFunc] {
+							return d // skip if not a workflow function
+						}
+						if d.wr.ActivityFuncs[d.currFunc] {
+							return d // skip if activity function
+						}
 					}
 					pos := d.ctx.Fset.Position(n.Lparen)
 					d.issues = append(d.issues, Issue{

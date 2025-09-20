@@ -2,6 +2,7 @@ package detectors
 
 import (
 	"go/ast"
+	"strings"
 
 	"github.com/afony10/cadence-workflow-linter/analyzer/registry"
 	"github.com/afony10/cadence-workflow-linter/config"
@@ -31,30 +32,31 @@ func (d *ImportDetector) SetFileContext(ctx FileContext) {
 
 func (d *ImportDetector) Issues() []Issue { return d.issues }
 
-// We flag disallowed imports only if the file contains at least one workflow.
 func (d *ImportDetector) Visit(node ast.Node) ast.Visitor {
-	if len(d.wr.WorkflowFuncs) == 0 {
+	imp, ok := node.(*ast.ImportSpec)
+	if !ok {
 		return d
 	}
-	switch n := node.(type) {
-	case *ast.ImportSpec:
-		pathLit := n.Path.Value // quoted, e.g. "\"math/rand\""
-		path := pathLit
-		if len(path) >= 2 && path[0] == '"' && path[len(path)-1] == '"' {
-			path = path[1 : len(path)-1]
-		}
-		for _, r := range d.rules {
-			if r.Path == path {
-				pos := d.ctx.Fset.Position(n.Pos())
-				d.issues = append(d.issues, Issue{
-					File:     d.ctx.File,
-					Line:     pos.Line,
-					Column:   pos.Column,
-					Rule:     r.Rule,
-					Severity: r.Severity,
-					Message:  r.Message,
-				})
+
+	path := strings.Trim(imp.Path.Value, `"`)
+	for _, rule := range d.rules {
+		if path == rule.Path {
+			pos := d.ctx.Fset.Position(imp.Pos())
+
+			// If this file only contains activities, mark as warning instead of error
+			severity := rule.Severity
+			if len(d.wr.WorkflowFuncs) == 0 && len(d.wr.ActivityFuncs) > 0 {
+				severity = "warning"
 			}
+
+			d.issues = append(d.issues, Issue{
+				File:     d.ctx.File,
+				Line:     pos.Line,
+				Column:   pos.Column,
+				Rule:     rule.Rule,
+				Severity: severity,
+				Message:  rule.Message,
+			})
 		}
 	}
 	return d

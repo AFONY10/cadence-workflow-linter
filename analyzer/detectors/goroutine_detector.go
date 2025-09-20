@@ -33,9 +33,16 @@ func (d *GoroutineDetector) Visit(node ast.Node) ast.Visitor {
 		d.currFunc = n.Name.Name
 
 	case *ast.GoStmt:
-		if d.wr != nil && !d.wr.WorkflowFuncs[d.currFunc] {
-			return d
+		// Only flag if inside known workflow function
+		if d.wr != nil {
+			if !d.wr.WorkflowFuncs[d.currFunc] {
+				return d // skip if not a workflow function
+			}
+			if d.wr.ActivityFuncs[d.currFunc] {
+				return d // skip if activity function
+			}
 		}
+		// Flag the issue
 		pos := d.ctx.Fset.Position(n.Go)
 		d.issues = append(d.issues, Issue{
 			File:     d.ctx.File,
@@ -45,6 +52,7 @@ func (d *GoroutineDetector) Visit(node ast.Node) ast.Visitor {
 			Severity: "error",
 			Message:  "Detected goroutine in workflow. Use workflow.Go(ctx) instead.",
 		})
+
 	}
 	return d
 }
