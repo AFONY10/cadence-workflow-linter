@@ -18,7 +18,6 @@ type FuncCallDetector struct {
 }
 
 func NewFuncCallDetector(rules []config.FunctionRule) *FuncCallDetector {
-	// index rules for faster matching
 	fnSet := map[string]map[string]config.FunctionRule{}
 	for _, r := range rules {
 		p := r.Package
@@ -36,15 +35,9 @@ func NewFuncCallDetector(rules []config.FunctionRule) *FuncCallDetector {
 	}
 }
 
-func (d *FuncCallDetector) SetWorkflowRegistry(reg *registry.WorkflowRegistry) {
-	d.wr = reg
-}
-
-func (d *FuncCallDetector) SetFileContext(ctx FileContext) {
-	d.ctx = ctx
-}
-
-func (d *FuncCallDetector) Issues() []Issue { return d.issues }
+func (d *FuncCallDetector) SetWorkflowRegistry(reg *registry.WorkflowRegistry) { d.wr = reg }
+func (d *FuncCallDetector) SetFileContext(ctx FileContext)                     { d.ctx = ctx }
+func (d *FuncCallDetector) Issues() []Issue                                    { return d.issues }
 
 func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 	switch n := node.(type) {
@@ -52,16 +45,7 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 		d.currFunc = n.Name.Name
 
 	case *ast.SelectorExpr:
-		// Only flag if inside known workflow function
-		if d.wr != nil {
-			if !d.wr.WorkflowFuncs[d.currFunc] {
-				return d // skip if not a workflow function
-			}
-
-			if d.wr.ActivityFuncs[d.currFunc] {
-				return d // skip if activity function
-			}
-		}
+		// pkg.Func(...)
 		ident, ok := n.X.(*ast.Ident)
 		if !ok {
 			return d
@@ -69,8 +53,7 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 		pkgAlias := ident.Name
 		importPath := d.ctx.ImportMap[pkgAlias]
 		if importPath == "" {
-			// Best-effort: fall back to alias as if it were a path (for std pkgs like "time", "fmt", "os")
-			importPath = pkgAlias
+			importPath = pkgAlias // best-effort for stdlib aliases like "time"
 		}
 		funcName := n.Sel.Name
 
@@ -85,6 +68,7 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 					Rule:     rule.Rule,
 					Severity: rule.Severity,
 					Message:  msg,
+					Func:     d.currFunc, // IMPORTANT: record current function name
 				})
 			}
 		}

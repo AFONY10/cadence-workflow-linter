@@ -17,15 +17,9 @@ func NewChannelDetector() *ChannelDetector {
 	return &ChannelDetector{issues: []Issue{}}
 }
 
-func (d *ChannelDetector) SetWorkflowRegistry(reg *registry.WorkflowRegistry) {
-	d.wr = reg
-}
-
-func (d *ChannelDetector) SetFileContext(ctx FileContext) {
-	d.ctx = ctx
-}
-
-func (d *ChannelDetector) Issues() []Issue { return d.issues }
+func (d *ChannelDetector) SetWorkflowRegistry(reg *registry.WorkflowRegistry) { d.wr = reg }
+func (d *ChannelDetector) SetFileContext(ctx FileContext)                     { d.ctx = ctx }
+func (d *ChannelDetector) Issues() []Issue                                    { return d.issues }
 
 func (d *ChannelDetector) Visit(node ast.Node) ast.Visitor {
 	switch n := node.(type) {
@@ -33,20 +27,10 @@ func (d *ChannelDetector) Visit(node ast.Node) ast.Visitor {
 		d.currFunc = n.Name.Name
 
 	case *ast.CallExpr:
-		// Look for make(chan ...)
+		// make(chan T, ...)
 		if ident, ok := n.Fun.(*ast.Ident); ok && ident.Name == "make" {
-			// Only flag if inside known workflow function
 			if len(n.Args) > 0 {
-				// Check if the first argument is a channel type
 				if _, ok := n.Args[0].(*ast.ChanType); ok {
-					if d.wr != nil {
-						if !d.wr.WorkflowFuncs[d.currFunc] {
-							return d // skip if not a workflow function
-						}
-						if d.wr.ActivityFuncs[d.currFunc] {
-							return d // skip if activity function
-						}
-					}
 					pos := d.ctx.Fset.Position(n.Lparen)
 					d.issues = append(d.issues, Issue{
 						File:     d.ctx.File,
@@ -54,7 +38,8 @@ func (d *ChannelDetector) Visit(node ast.Node) ast.Visitor {
 						Column:   pos.Column,
 						Rule:     "Concurrency",
 						Severity: "error",
-						Message:  "Detected channel creation in workflow. Use workflow.Channel(ctx) instead.",
+						Message:  "Detected channel creation. Use workflow.Channel(ctx) inside workflows.",
+						Func:     d.currFunc,
 					})
 				}
 			}

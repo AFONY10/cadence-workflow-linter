@@ -17,6 +17,10 @@ const (
 	WorkflowName = "OrderProcessingWorkflow"
 )
 
+/* func helper() {
+	time.Now() // should be flagged
+} */
+
 func DeliveryActivity(ctx context.Context, order Order) error {
 	// Activities are fine to do this
 	fmt.Println("Started at", time.Now())
@@ -66,7 +70,7 @@ func PackageProcessingWorkflow(ctx workflow.Context, order Order) (string, error
 	locations := []string{order.SendFrom}
 	packageDelivered := false
 
-	now := time.Now()
+	now := Helper2() // should be flagged
 	fmt.Println("Delivery started at", now)
 	r := rand.Intn(100)
 	fmt.Println("Random number for simulating delivery time:", r)
