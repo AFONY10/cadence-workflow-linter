@@ -12,7 +12,7 @@ import (
 	"github.com/afony10/cadence-workflow-linter/analyzer/registry"
 )
 
-// internal structure to keep parsed files
+// internal structure of a parsed file, with import map
 type parsedFile struct {
 	filename  string
 	fset      *token.FileSet
