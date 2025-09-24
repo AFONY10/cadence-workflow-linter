@@ -3,6 +3,7 @@ package testdata
 import (
 	"context"
 	"time"
+
 	"go.uber.org/cadence/workflow"
 )
 
@@ -10,13 +11,13 @@ import (
 func MyWorkflow(ctx workflow.Context, input string) error {
 	// Direct function call: MyWorkflow -> helperFunction
 	result := helperFunction(input)
-	
+
 	// Another direct call: MyWorkflow -> processData
 	processData(result)
-	
+
 	// Call to time.Now (external package call - not tracked in CallGraph)
 	_ = time.Now()
-	
+
 	return nil
 }
 
@@ -40,7 +41,7 @@ func validateInput(s string) bool {
 	return len(s) > 0
 }
 
-// This is an activity function (has context.Context parameter) 
+// This is an activity function (has context.Context parameter)
 func MyActivity(ctx context.Context, data string) (string, error) {
 	// Activity calls helper: MyActivity -> activityHelper
 	return activityHelper(data), nil
@@ -48,7 +49,7 @@ func MyActivity(ctx context.Context, data string) (string, error) {
 
 // Helper for activity
 func activityHelper(data string) string {
-	// Even though this calls time.Now, it won't be flagged 
+	// Even though this calls time.Now, it won't be flagged
 	// because it's reachable from activity, not workflow
 	_ = time.Now()
 	return data + "_activity_result"
