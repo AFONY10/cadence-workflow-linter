@@ -1,0 +1,13 @@
+main.go: Entry point, parses args, passes files/dirs to analyzer.
+
+analyzer/scanner.go: Parses Go source files into AST, coordinates registry + detectors.
+
+analyzer/registry/: Tracks workflow functions & call graph. Decides which funcs are workflow-reachable.
+
+analyzer/detectors/: Pluggable rules (time, randomness, IO, goroutines, channels).
+
+config/loader.go: Loads rules.yaml dynamically so detectors aren’t hardcoded.
+
+tests/: Unit tests for detectors, multi-file reachability, etc.
+
+testdata/: Example source files that simulate workflow + activity code (including edge cases).
