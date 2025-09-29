@@ -18,7 +18,7 @@ func computePackagePath(filePath, baseDir string, node *ast.File) string {
 	// Use the package name from the AST as a fallback
 	pkgName := "local"
 	if node.Name != nil {
-		pkgName = node.Name.Name 
+		pkgName = node.Name.Name
 	}
 
 	// Try to determine if this is in a known module structure
@@ -31,7 +31,7 @@ func computePackagePath(filePath, baseDir string, node *ast.File) string {
 			if err == nil {
 				parts := strings.Split(filepath.ToSlash(rel), "/")
 				if len(parts) >= 2 && parts[0] == "mod" {
-					// Build path like "example.com/linttest/pkgutil" 
+					// Build path like "example.com/linttest/pkgutil"
 					return "example.com/linttest/" + strings.Join(parts[1:], "/")
 				}
 			}
@@ -53,6 +53,7 @@ func computePackagePath(filePath, baseDir string, node *ast.File) string {
 
 	return pkgName
 }
+
 type parsedFile struct {
 	filename  string
 	fset      *token.FileSet
@@ -104,10 +105,10 @@ func parseAllAndBuildRegistry(target string) ([]parsedFile, *registry.WorkflowRe
 		}
 
 		importMap := buildImportMap(node)
-		
+
 		// Compute package path for this file
 		pkgPath := computePackagePath(path, baseDir, node)
-		
+
 		files = append(files, parsedFile{
 			filename:  path,
 			fset:      fset,
@@ -115,10 +116,10 @@ func parseAllAndBuildRegistry(target string) ([]parsedFile, *registry.WorkflowRe
 			importMap: importMap,
 			pkgPath:   pkgPath,
 		})
-		
+
 		// Use the new ProcessFile method instead of ast.Walk
 		wr.ProcessFile(node, pkgPath, importMap)
-		
+
 		return nil
 	}
 

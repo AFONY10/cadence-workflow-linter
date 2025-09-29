@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+
 	"example.com/linttest/pkgutil"
 	"example.com/linttest/workflow"
 )
@@ -11,13 +12,13 @@ func TestWorkflow(ctx workflow.Context) error {
 	// This call should make pkgutil.Helper reachable from workflow
 	// and thus time.Now() in Helper() should be flagged
 	timestamp := pkgutil.Helper()
-	
+
 	// This call should be fine since SafeHelper doesn't violate rules
 	msg := pkgutil.SafeHelper()
-	
+
 	_ = timestamp
 	_ = msg
-	
+
 	return nil
 }
 

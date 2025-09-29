@@ -72,10 +72,10 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 				if d.wr != nil && d.wr.IsWorkflowReachable(canonicalCurrentFunc) {
 					pos := d.ctx.Fset.Position(n.Sel.Pos())
 					msg := strings.ReplaceAll(rule.Message, "%FUNC%", funcName)
-					
+
 					// Try to get call stack for better debugging
 					callStack := d.wr.CallPathTo(canonicalCurrentFunc)
-					
+
 					d.issues = append(d.issues, Issue{
 						File:      d.ctx.File,
 						Line:      pos.Line,
