@@ -31,6 +31,10 @@ type FileContextAware interface {
 	SetFileContext(ctx FileContext)
 }
 
+type PackageAware interface {
+	SetPackagePath(pkgPath string)
+}
+
 type IssueProvider interface {
 	Issues() []Issue
 }

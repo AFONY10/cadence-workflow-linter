@@ -13,6 +13,7 @@ type FuncCallDetector struct {
 	ctx         FileContext
 	wr          *registry.WorkflowRegistry
 	currFunc    string
+	pkgPath     string // package path for the current file
 	issues      []Issue
 	functionSet map[string]map[string]config.FunctionRule // importPath -> funcName -> rule
 }
@@ -39,10 +40,17 @@ func (d *FuncCallDetector) SetWorkflowRegistry(reg *registry.WorkflowRegistry) {
 func (d *FuncCallDetector) SetFileContext(ctx FileContext)                     { d.ctx = ctx }
 func (d *FuncCallDetector) Issues() []Issue                                    { return d.issues }
 
+// SetPackagePath sets the package path for canonical function naming
+func (d *FuncCallDetector) SetPackagePath(pkgPath string) {
+	d.pkgPath = pkgPath
+}
+
 func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 	switch n := node.(type) {
 	case *ast.FuncDecl:
-		d.currFunc = n.Name.Name
+		if n.Name != nil {
+			d.currFunc = n.Name.Name
+		}
 
 	case *ast.SelectorExpr:
 		// pkg.Func(...)
@@ -59,17 +67,26 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 
 		if ruleMap, ok := d.functionSet[importPath]; ok {
 			if rule, ok := ruleMap[funcName]; ok {
-				pos := d.ctx.Fset.Position(n.Sel.Pos())
-				msg := strings.ReplaceAll(rule.Message, "%FUNC%", funcName)
-				d.issues = append(d.issues, Issue{
-					File:     d.ctx.File,
-					Line:     pos.Line,
-					Column:   pos.Column,
-					Rule:     rule.Rule,
-					Severity: rule.Severity,
-					Message:  msg,
-					Func:     d.currFunc, // IMPORTANT: record current function name
-				})
+				// Check if we're in a workflow context using canonical function name
+				canonicalCurrentFunc := d.pkgPath + "." + d.currFunc
+				if d.wr != nil && d.wr.IsWorkflowReachable(canonicalCurrentFunc) {
+					pos := d.ctx.Fset.Position(n.Sel.Pos())
+					msg := strings.ReplaceAll(rule.Message, "%FUNC%", funcName)
+					
+					// Try to get call stack for better debugging
+					callStack := d.wr.CallPathTo(canonicalCurrentFunc)
+					
+					d.issues = append(d.issues, Issue{
+						File:      d.ctx.File,
+						Line:      pos.Line,
+						Column:    pos.Column,
+						Rule:      rule.Rule,
+						Severity:  rule.Severity,
+						Message:   msg,
+						Func:      d.currFunc,
+						CallStack: callStack,
+					})
+				}
 			}
 		}
 	}
