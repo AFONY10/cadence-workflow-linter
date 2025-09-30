@@ -1,6 +1,7 @@
 
 
 ```mermaid
+flowchart TD
     A[CLI entrypoint: main.go] --> B[Analyzer]
     B --> C[Scanner]
     C --> D[Workflow Registry]

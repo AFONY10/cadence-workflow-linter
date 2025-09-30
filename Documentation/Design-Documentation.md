@@ -252,7 +252,7 @@ flowchart TD
     GET_DETECTORS --> SET_CONTEXT[Set Workflow Registry & File Context]
     
     SET_CONTEXT --> WALK_AST[Walk AST with Each Detector]
-    WALK_AST --> DETECTOR_VISIT[Detector.Visit(node)]
+    WALK_AST --> DETECTOR_VISIT[Call Detector Visit Method]
     
     DETECTOR_VISIT --> CHECK_VIOLATION{Violation Detected?}
     
