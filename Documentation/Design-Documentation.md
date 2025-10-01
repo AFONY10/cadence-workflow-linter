@@ -506,6 +506,128 @@ The linter performs two-pass analysis:
 
 This approach ensures accurate detection across file boundaries and proper handling of helper functions defined in separate files.
 
+## Hybrid Package Classification System
+
+### Overview
+
+The linter uses a hybrid approach combining go.mod parsing with enhanced heuristics to accurately classify packages as internal or external. This system provides robust package classification while maintaining compatibility with projects that don't follow standard module structures.
+
+### Implementation Strategy
+
+```mermaid
+flowchart TD
+    START[Package Classification Request] --> GOMOD_AVAILABLE{go.mod Available?}
+    
+    GOMOD_AVAILABLE -->|Yes| SOLUTION1[Solution 1: go.mod Parsing]
+    GOMOD_AVAILABLE -->|No| SOLUTION3[Solution 3: Enhanced Heuristics]
+    
+    SOLUTION1 --> INTERNAL_CHECK{Is Internal Package?}
+    INTERNAL_CHECK -->|Yes| CLASSIFY_INTERNAL[Classify as Internal]
+    INTERNAL_CHECK -->|No| REPLACE_CHECK{Has Replace Directive?}
+    
+    REPLACE_CHECK -->|Yes| LOCAL_REPLACE{Replace with Local Path?}
+    LOCAL_REPLACE -->|Yes| CLASSIFY_INTERNAL
+    LOCAL_REPLACE -->|No| CLASSIFY_EXTERNAL[Classify as External]
+    REPLACE_CHECK -->|No| CLASSIFY_EXTERNAL
+    
+    SOLUTION3 --> HARDCODED_CHECK{Matches Known Patterns?}
+    HARDCODED_CHECK -->|Yes| CLASSIFY_INTERNAL
+    HARDCODED_CHECK -->|No| TESTDATA_CHECK{Testdata Package?}
+    TESTDATA_CHECK -->|Yes| CLASSIFY_INTERNAL
+    TESTDATA_CHECK -->|No| CLASSIFY_EXTERNAL
+    
+    CLASSIFY_INTERNAL --> END_INTERNAL[Internal Package]
+    CLASSIFY_EXTERNAL --> EXTERNAL_RULES{Known External Rules?}
+    
+    EXTERNAL_RULES -->|Yes| APPLY_RULES[Apply Configured Rules]
+    EXTERNAL_RULES -->|No| SAFE_CHECK{Safe Package List?}
+    
+    SAFE_CHECK -->|Yes| IGNORE[Ignore - Safe External]
+    SAFE_CHECK -->|No| FRAMEWORK_CHECK{Framework Package?}
+    
+    FRAMEWORK_CHECK -->|Yes| IGNORE
+    FRAMEWORK_CHECK -->|No| UNKNOWN_WARNING[Generate Info Warning]
+    
+    APPLY_RULES --> END_EXTERNAL[External Package with Rules]
+    IGNORE --> END_SAFE[Safe External Package]
+    UNKNOWN_WARNING --> END_UNKNOWN[Unknown External Package]
+```
+
+### Key Components
+
+#### 1. ModuleInfo Parser
+
+```go
+type ModuleInfo struct {
+    ModulePath  string            // The module declaration path
+    GoVersion   string            // Go version requirement  
+    Requires    []RequireDirective // Direct dependencies
+    Replaces    []ReplaceDirective // Replace directives
+    RootDir     string            // Directory containing go.mod
+}
+```
+
+**Features:**
+- Parses module path, go version, require and replace directives
+- Handles both single-line and block syntax
+- Supports indirect dependency detection
+- Processes local path replacements
+
+#### 2. Package Resolver
+
+```go
+type PackageResolver struct {
+    moduleInfo *modutils.ModuleInfo
+    baseDir    string
+}
+```
+
+**Hybrid Classification Logic:**
+1. **Primary**: Use go.mod information when available
+2. **Fallback**: Enhanced heuristics for compatibility
+3. **Special Cases**: Handle testdata and replaced packages
+
+#### 3. External Package Detection
+
+The `FuncCallDetector` integrates the hybrid approach:
+
+```go
+func (d *FuncCallDetector) isInternalPackage(importPath string) bool {
+    // Solution 1: Use go.mod information if available
+    if d.moduleInfo != nil {
+        if d.moduleInfo.IsInternalPackage(importPath) {
+            return true
+        }
+        
+        // Check replace directives for local paths
+        if isReplaced, newPath := d.moduleInfo.IsReplacedPackage(importPath); isReplaced {
+            if isLocalPath(newPath) {
+                return true
+            }
+        }
+    }
+    
+    // Solution 3: Enhanced heuristics as fallback
+    return d.isInternalByHeuristics(importPath)
+}
+```
+
+### Benefits
+
+1. **Accuracy**: go.mod parsing provides authoritative module information
+2. **Compatibility**: Fallback heuristics work without go.mod
+3. **Flexibility**: Handles replace directives and local development
+4. **Maintainability**: Reduces hardcoded assumptions
+
+### Detection Tiers
+
+The hybrid system provides four-tier external package coverage:
+
+1. **Known Bad Packages** → Error (configured rules)
+2. **Known Safe Packages** → Ignored (safe list)  
+3. **Unknown External Packages** → Info Warning (user verification)
+4. **Framework Packages** → Ignored (Cadence, stdlib)
+
 ---
 
-This design documentation provides a comprehensive overview of the Cadence Workflow Linter's architecture, components, and design decisions. The modular design allows for easy extension with new detectors while maintaining accuracy through sophisticated workflow context analysis.
+This design documentation provides a comprehensive overview of the Cadence Workflow Linter's architecture, components, and design decisions. The modular design allows for easy extension with new detectors while maintaining accuracy through sophisticated workflow context analysis and hybrid package classification.

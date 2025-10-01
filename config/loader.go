@@ -21,9 +21,19 @@ type ImportRule struct {
 	Message  string `yaml:"message"`  // message if path is present in file with workflows
 }
 
+type ExternalPackageRule struct {
+	Rule      string   `yaml:"rule"`
+	Package   string   `yaml:"package"`   // full import path (e.g., "github.com/google/uuid")
+	Functions []string `yaml:"functions"` // function names to flag
+	Severity  string   `yaml:"severity"`  // e.g., "error", "warning"
+	Message   string   `yaml:"message"`   // message when violation is detected
+}
+
 type RuleSet struct {
-	FunctionCalls     []FunctionRule `yaml:"function_calls"`
-	DisallowedImports []ImportRule   `yaml:"disallowed_imports"`
+	FunctionCalls        []FunctionRule        `yaml:"function_calls"`
+	DisallowedImports    []ImportRule          `yaml:"disallowed_imports"`
+	ExternalPackages     []ExternalPackageRule `yaml:"external_packages"`
+	SafeExternalPackages []string              `yaml:"safe_external_packages"`
 }
 
 func LoadRules(path string) (*RuleSet, error) {

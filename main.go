@@ -10,6 +10,7 @@ import (
 
 	"github.com/afony10/cadence-workflow-linter/analyzer"
 	"github.com/afony10/cadence-workflow-linter/analyzer/detectors"
+	"github.com/afony10/cadence-workflow-linter/analyzer/modutils"
 	"github.com/afony10/cadence-workflow-linter/config"
 
 	"go/ast"
@@ -36,10 +37,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Factory returns fresh visitors per file using config
-	factory := func() []ast.Visitor {
+	// Factory returns fresh visitors per file using config and module info
+	factory := func(moduleInfo *modutils.ModuleInfo) []ast.Visitor {
 		return []ast.Visitor{
-			detectors.NewFuncCallDetector(rules.FunctionCalls),
+			detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, moduleInfo),
 			detectors.NewImportDetector(rules.DisallowedImports),
 			detectors.NewGoroutineDetector(),
 			detectors.NewChannelDetector(),

@@ -55,7 +55,14 @@ func walkOnce(t *testing.T, v ast.Visitor, fset *token.FileSet, node *ast.File, 
 	t.Helper()
 
 	reg := registry.NewWorkflowRegistry() // keep current (non-config) registry
-	ast.Walk(reg, node)
+
+	// Set package path for proper workflow detection
+	pkgPath := "testdata/testdata"
+	if node.Name != nil {
+		pkgPath = "testdata/" + node.Name.Name
+	}
+
+	reg.ProcessFile(node, pkgPath, importMapFromFile(node))
 
 	if wa, ok := v.(detectors.WorkflowAware); ok {
 		wa.SetWorkflowRegistry(reg)
@@ -66,6 +73,9 @@ func walkOnce(t *testing.T, v ast.Visitor, fset *token.FileSet, node *ast.File, 
 			Fset:      fset,
 			ImportMap: importMapFromFile(node),
 		})
+	}
+	if pa, ok := v.(detectors.PackageAware); ok {
+		pa.SetPackagePath(pkgPath)
 	}
 
 	ast.Walk(v, node)
@@ -85,7 +95,7 @@ func TestFuncCallDetector_TimeUsage(t *testing.T) {
 	}
 
 	fset, node, file := parse(t, "time_violation.go")
-	d := detectors.NewFuncCallDetector(rules.FunctionCalls)
+	d := detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, nil)
 	issues := walkOnce(t, d, fset, node, file)
 	if len(issues) == 0 {
 		t.Fatalf("expected at least one TimeUsage issue in %s", file)
@@ -99,7 +109,7 @@ func TestFuncCallDetector_Randomness(t *testing.T) {
 	}
 
 	fset, node, file := parse(t, "rand_violation.go")
-	d := detectors.NewFuncCallDetector(rules.FunctionCalls)
+	d := detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, nil)
 	issues := walkOnce(t, d, fset, node, file)
 	if len(issues) == 0 {
 		t.Fatalf("expected at least one Randomness issue in %s", file)
@@ -113,7 +123,7 @@ func TestFuncCallDetector_IOCalls(t *testing.T) {
 	}
 
 	fset, node, file := parse(t, "io_violation.go")
-	d := detectors.NewFuncCallDetector(rules.FunctionCalls)
+	d := detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, nil)
 	issues := walkOnce(t, d, fset, node, file)
 	if len(issues) == 0 {
 		t.Fatalf("expected at least one IOCalls issue in %s", file)
@@ -145,7 +155,7 @@ func TestActivityNotFlagged(t *testing.T) {
 	}
 
 	fset, node, file := parse(t, "activity_ok.go")
-	d := detectors.NewFuncCallDetector(rules.FunctionCalls)
+	d := detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, nil)
 	issues := walkOnce(t, d, fset, node, file)
 
 	if len(issues) != 0 {

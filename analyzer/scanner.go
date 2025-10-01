@@ -9,25 +9,44 @@ import (
 	"strings"
 
 	"github.com/afony10/cadence-workflow-linter/analyzer/detectors"
+	"github.com/afony10/cadence-workflow-linter/analyzer/modutils"
 	"github.com/afony10/cadence-workflow-linter/analyzer/registry"
 )
 
-// computePackagePath determines the package path for a file
-// This is a best-effort implementation for package path resolution
-func computePackagePath(filePath, baseDir string, node *ast.File) string {
+// PackageResolver handles package path resolution using hybrid approach
+type PackageResolver struct {
+	moduleInfo *modutils.ModuleInfo
+	baseDir    string
+}
+
+// NewPackageResolver creates a resolver with go.mod parsing and fallback heuristics
+func NewPackageResolver(baseDir string) *PackageResolver {
+	resolver := &PackageResolver{baseDir: baseDir}
+
+	// Try to find and parse go.mod (Solution 1)
+	if goModPath, err := modutils.FindGoMod(baseDir); err == nil {
+		if moduleInfo, err := modutils.ParseGoMod(goModPath); err == nil {
+			resolver.moduleInfo = moduleInfo
+		}
+	}
+
+	return resolver
+}
+
+// computePackagePath determines the package path using hybrid approach
+func (pr *PackageResolver) computePackagePath(filePath string, node *ast.File) string {
 	// Use the package name from the AST as a fallback
 	pkgName := "local"
 	if node.Name != nil {
 		pkgName = node.Name.Name
 	}
 
-	// Try to determine if this is in a known module structure
-	// For testdata or simple cases, use the package name
+	// Enhanced heuristics for testdata (Solution 3)
 	if strings.Contains(filePath, "testdata") {
 		// For testdata files, use a special prefix
 		if strings.Contains(filePath, string(filepath.Separator)+"mod"+string(filepath.Separator)) {
 			// Handle multi-package test structure like testdata/mod/pkgutil/
-			rel, err := filepath.Rel(baseDir, filepath.Dir(filePath))
+			rel, err := filepath.Rel(pr.baseDir, filepath.Dir(filePath))
 			if err == nil {
 				parts := strings.Split(filepath.ToSlash(rel), "/")
 				if len(parts) >= 2 && parts[0] == "mod" {
@@ -39,14 +58,33 @@ func computePackagePath(filePath, baseDir string, node *ast.File) string {
 		return "testdata/" + pkgName
 	}
 
-	// For main package or local files, use the module path if possible
-	// This is a simplified version - in a real implementation you'd parse go.mod
+	// Use go.mod info if available (Solution 1)
+	if pr.moduleInfo != nil {
+		modulePath := pr.moduleInfo.ModulePath
+
+		// For main package, return the module path
+		if pkgName == "main" {
+			return modulePath
+		}
+
+		// For subpackages, build the full path
+		rel, err := filepath.Rel(pr.moduleInfo.RootDir, filepath.Dir(filePath))
+		if err == nil && rel != "." {
+			subPath := strings.ReplaceAll(rel, string(filepath.Separator), "/")
+			return modulePath + "/" + subPath
+		}
+
+		return modulePath
+	}
+
+	// Fallback to enhanced heuristics (Solution 3)
+	// For main package or local files, use hardcoded fallback
 	if pkgName == "main" {
 		return "github.com/afony10/cadence-workflow-linter"
 	}
 
 	// For other packages, try to build a reasonable path
-	rel, err := filepath.Rel(baseDir, filepath.Dir(filePath))
+	rel, err := filepath.Rel(pr.baseDir, filepath.Dir(filePath))
 	if err == nil && rel != "." {
 		return "github.com/afony10/cadence-workflow-linter/" + strings.ReplaceAll(rel, string(filepath.Separator), "/")
 	}
@@ -83,7 +121,7 @@ func buildImportMap(f *ast.File) map[string]string {
 }
 
 // First pass: parse files and build the global registry (workflows, activities, call graph)
-func parseAllAndBuildRegistry(target string) ([]parsedFile, *registry.WorkflowRegistry, error) {
+func parseAllAndBuildRegistry(target string) ([]parsedFile, *registry.WorkflowRegistry, *modutils.ModuleInfo, error) {
 	var files []parsedFile
 	wr := registry.NewWorkflowRegistry()
 
@@ -92,6 +130,9 @@ func parseAllAndBuildRegistry(target string) ([]parsedFile, *registry.WorkflowRe
 	if info, err := os.Stat(target); err == nil && !info.IsDir() {
 		baseDir = filepath.Dir(target)
 	}
+
+	// Create package resolver with hybrid approach
+	resolver := NewPackageResolver(baseDir)
 
 	addFile := func(path string) error {
 		src, err := os.ReadFile(path)
@@ -106,8 +147,8 @@ func parseAllAndBuildRegistry(target string) ([]parsedFile, *registry.WorkflowRe
 
 		importMap := buildImportMap(node)
 
-		// Compute package path for this file
-		pkgPath := computePackagePath(path, baseDir, node)
+		// Compute package path for this file using hybrid approach
+		pkgPath := resolver.computePackagePath(path, node)
 
 		files = append(files, parsedFile{
 			filename:  path,
@@ -125,7 +166,7 @@ func parseAllAndBuildRegistry(target string) ([]parsedFile, *registry.WorkflowRe
 
 	info, err := os.Stat(target)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if info.IsDir() {
 		err = filepath.Walk(target, func(path string, fi os.FileInfo, _ error) error {
@@ -138,19 +179,19 @@ func parseAllAndBuildRegistry(target string) ([]parsedFile, *registry.WorkflowRe
 		err = addFile(target)
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return files, wr, nil
+	return files, wr, resolver.moduleInfo, nil
 }
 
 // Second pass: run detectors on each file with global registry, then filter/enrich issues.
-func runDetectors(files []parsedFile, wr *registry.WorkflowRegistry, factory func() []ast.Visitor) ([]detectors.Issue, error) {
+func runDetectors(files []parsedFile, wr *registry.WorkflowRegistry, moduleInfo *modutils.ModuleInfo, factory func(*modutils.ModuleInfo) []ast.Visitor) ([]detectors.Issue, error) {
 	var all []detectors.Issue
 
 	// Run detectors over all files, collect issues
 	for _, pf := range files {
-		visitors := factory()
+		visitors := factory(moduleInfo)
 		ctx := detectors.FileContext{File: pf.filename, Fset: pf.fset, ImportMap: pf.importMap}
 		for _, v := range visitors {
 			if wa, ok := v.(detectors.WorkflowAware); ok {
@@ -175,18 +216,18 @@ func runDetectors(files []parsedFile, wr *registry.WorkflowRegistry, factory fun
 }
 
 // Public API: ScanFile or ScanDirectory using two-pass analysis
-func ScanFile(path string, factory func() []ast.Visitor) ([]detectors.Issue, error) {
-	files, wr, err := parseAllAndBuildRegistry(path)
+func ScanFile(path string, factory func(*modutils.ModuleInfo) []ast.Visitor) ([]detectors.Issue, error) {
+	files, wr, moduleInfo, err := parseAllAndBuildRegistry(path)
 	if err != nil {
 		return nil, err
 	}
-	return runDetectors(files, wr, factory)
+	return runDetectors(files, wr, moduleInfo, factory)
 }
 
-func ScanDirectory(root string, factory func() []ast.Visitor) ([]detectors.Issue, error) {
-	files, wr, err := parseAllAndBuildRegistry(root)
+func ScanDirectory(root string, factory func(*modutils.ModuleInfo) []ast.Visitor) ([]detectors.Issue, error) {
+	files, wr, moduleInfo, err := parseAllAndBuildRegistry(root)
 	if err != nil {
 		return nil, err
 	}
-	return runDetectors(files, wr, factory)
+	return runDetectors(files, wr, moduleInfo, factory)
 }

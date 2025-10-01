@@ -34,3 +34,33 @@ disallowed_imports:
     path: math/rand
     severity: warning
     message: "Importing math/rand in files with workflows is discouraged; consider deterministic alternatives."
+
+# External package rules for common third-party libraries
+external_packages:
+  # UUID Generation (very common issue)
+  - rule: UUIDGeneration
+    package: github.com/google/uuid
+    functions: [New, NewRandom, NewString]
+    severity: error
+    message: "UUID generation is non-deterministic. Use workflow.SideEffect for UUID generation in workflows."
+
+  # Popular HTTP client libraries
+  - rule: HTTPClient
+    package: github.com/go-resty/resty/v2
+    functions: [Get, Post, Put, Delete, Execute]
+    severity: error
+    message: "HTTP calls should be performed in activities, not directly in workflows."
+
+  # Redis operations (common in microservices)
+  - rule: RedisOperations
+    package: github.com/go-redis/redis/v8
+    functions: [Get, Set, Del, Exists, Incr, Decr, HGet, HSet]
+    severity: error
+    message: "Redis operations should be performed in activities to ensure workflow determinism."
+
+# Known safe external packages that can be used in workflows
+safe_external_packages:
+  - github.com/pkg/errors      # Error handling - pure functions
+  - go.uber.org/zap           # Logging - safe when configured properly  
+  - github.com/stretchr/testify # Testing - only used in tests
+  - golang.org/x/crypto/bcrypt  # Deterministic crypto operations
