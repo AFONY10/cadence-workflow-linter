@@ -20,8 +20,10 @@ func main() {
 	// Command-line flags
 	var format string
 	var rulesPath string
+	var enableMapIteration bool
 	flag.StringVar(&format, "format", "json", "output format: json|yaml")
 	flag.StringVar(&rulesPath, "rules", "config/rules.yaml", "path to rules yaml")
+	flag.BoolVar(&enableMapIteration, "map-iteration", true, "enable detection of nondeterministic map iteration")
 	flag.Parse()
 
 	if flag.NArg() < 1 {
@@ -39,12 +41,16 @@ func main() {
 
 	// Factory returns fresh visitors per file using config and module info
 	factory := func(moduleInfo *modutils.ModuleInfo) []ast.Visitor {
-		return []ast.Visitor{
+		visitors := []ast.Visitor{
 			detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, moduleInfo),
 			detectors.NewImportDetector(rules.DisallowedImports),
 			detectors.NewGoroutineDetector(),
 			detectors.NewChannelDetector(),
 		}
+		if enableMapIteration {
+			visitors = append(visitors, detectors.NewMapIterationDetector(rules.FunctionCalls))
+		}
+		return visitors
 	}
 
 	var issues []detectors.Issue
