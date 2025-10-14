@@ -1,0 +1,58 @@
+{
+  "name": "cadence-workflow-linter-vscode",
+  "displayName": "Cadence Workflow Linter",
+  "description": "VS Code extension that runs the cadence-workflow-linter CLI and shows issues as diagnostics.",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:go",
+    "onCommand:cadenceLinter.run",
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cadenceLinter.run",
+        "title": "Cadence Workflow Linter: Run"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Cadence Workflow Linter",
+      "properties": {
+        "cadenceLinter.cliPath": {
+          "type": "string",
+          "default": "cadence-workflow-linter.exe",
+          "description": "Path to the cadence-workflow-linter CLI executable (absolute or relative to workspace root)."
+        },
+        "cadenceLinter.runOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the linter on file save."
+        },
+        "cadenceLinter.args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Additional CLI args to pass to the linter (e.g. ['--rules','config/rules.yaml'])."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "typescript": "^4.9.5",
+    "vscode": "^1.1.37"
+  }
+}

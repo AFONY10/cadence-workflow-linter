@@ -1,0 +1,48 @@
+# Go
+*.exe
+*.exe~
+*.test
+*.out
+bin/
+build/
+coverage.out
+vendor/
+
+# Node / VS Code extension
+vscode-extension/node_modules/
+vscode-extension/out/
+vscode-extension/*.vsix
+vscode-extension/.vscode-test/
+vscode-extension/.webpack/
+
+# Contrib analyzer builds
+contrib/analysis/**/bin/
+contrib/analysis/**/cmd/*/*.exe
+contrib/analysis/**/cmd/*/*.out
+
+# Editor/IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Temporary files
+*~
+*.swp
+*.tmp
+
+# Test / coverage
+coverage/
+coverage.out
+
+# Other
+npm-debug.log*
+package-lock.json
+yarn.lock
