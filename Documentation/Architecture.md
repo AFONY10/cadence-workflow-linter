@@ -16,6 +16,7 @@ Accurate: uses workflow context analysis and call-graph tracking to avoid false 
 
 The tool follows a modular architecture inspired by compilers and linters (like ESLint, golangci-lint).
 
+´´´mermaid
 flowchart TD
     A[CLI entrypoint: main.go] --> B[Analyzer]
     B --> C[Scanner]
@@ -26,6 +27,7 @@ flowchart TD
     D --> E
     E --> G[Issues]
     G --> A
+´´´
 
 3. Component Descriptions
 1. CLI Entrypoint (main.go)
