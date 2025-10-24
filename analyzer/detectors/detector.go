@@ -1,7 +1,9 @@
 package detectors
 
 import (
+	"go/ast"
 	"go/token"
+	"go/types"
 
 	"github.com/afony10/cadence-workflow-linter/analyzer/registry"
 	"github.com/afony10/cadence-workflow-linter/core"
@@ -20,6 +22,8 @@ type FileContext struct {
 	File      string
 	Fset      *token.FileSet
 	ImportMap map[string]string // alias -> import path
+	Node      *ast.File
+	TypesInfo *types.Info
 }
 
 type FileContextAware interface {

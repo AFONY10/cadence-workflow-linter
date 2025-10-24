@@ -8,6 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"go/types"
+
+	"golang.org/x/tools/go/packages"
+
 	"github.com/afony10/cadence-workflow-linter/analyzer/detectors"
 	"github.com/afony10/cadence-workflow-linter/analyzer/modutils"
 	"github.com/afony10/cadence-workflow-linter/analyzer/registry"
@@ -98,6 +102,7 @@ type parsedFile struct {
 	node      *ast.File
 	importMap map[string]string
 	pkgPath   string // canonical package path
+	typesInfo *types.Info
 }
 
 // Build an alias->import map for the file (e.g., r -> math/rand)
@@ -182,6 +187,27 @@ func parseAllAndBuildRegistry(target string) ([]parsedFile, *registry.WorkflowRe
 		return nil, nil, nil, err
 	}
 
+	// Attempt to load type information for the package(s) under baseDir.
+	cfg := &packages.Config{Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo, Dir: baseDir}
+	pkgs, perr := packages.Load(cfg, "./...")
+	if perr == nil {
+		// Map file path -> *types.Info for quick lookup
+		typesMap := make(map[string]*types.Info)
+		for _, p := range pkgs {
+			for i, f := range p.GoFiles {
+				if i < len(p.Syntax) {
+					typesMap[f] = p.TypesInfo
+				}
+			}
+		}
+		// Attach types info to parsed files where available
+		for i, pf := range files {
+			if ti, ok := typesMap[pf.filename]; ok {
+				files[i].typesInfo = ti
+			}
+		}
+	}
+
 	return files, wr, resolver.moduleInfo, nil
 }
 
@@ -192,7 +218,7 @@ func runDetectors(files []parsedFile, wr *registry.WorkflowRegistry, moduleInfo 
 	// Run detectors over all files, collect issues
 	for _, pf := range files {
 		visitors := factory(moduleInfo)
-		ctx := detectors.FileContext{File: pf.filename, Fset: pf.fset, ImportMap: pf.importMap}
+		ctx := detectors.FileContext{File: pf.filename, Fset: pf.fset, ImportMap: pf.importMap, Node: pf.node, TypesInfo: pf.typesInfo}
 		for _, v := range visitors {
 			if wa, ok := v.(detectors.WorkflowAware); ok {
 				wa.SetWorkflowRegistry(wr)
