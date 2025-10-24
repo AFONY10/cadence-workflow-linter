@@ -29,8 +29,25 @@ func (d *GoroutineDetector) Visit(node ast.Node) ast.Visitor {
 		d.currFunc = n.Name.Name
 
 	case *ast.GoStmt:
+		// Try to extract the callee when the go statement is a call expression
+		callee := ""
+		if n.Call != nil {
+			callExpr := n.Call
+			switch fn := callExpr.Fun.(type) {
+			case *ast.Ident:
+				callee = fn.Name
+			case *ast.SelectorExpr:
+				// pkg.Func or receiver.Method
+				if id, ok := fn.X.(*ast.Ident); ok {
+					callee = id.Name + "." + fn.Sel.Name
+				} else {
+					callee = fn.Sel.Name
+				}
+			}
+		}
+
 		pos := d.ctx.Fset.Position(n.Go)
-		d.issues = append(d.issues, Issue{
+		iss := Issue{
 			File:     d.ctx.File,
 			Line:     pos.Line,
 			Column:   pos.Column,
@@ -38,7 +55,11 @@ func (d *GoroutineDetector) Visit(node ast.Node) ast.Visitor {
 			Severity: "error",
 			Message:  "Detected goroutine. Use workflow.Go(ctx) inside workflows.",
 			Func:     d.currFunc,
-		})
+		}
+		if callee != "" {
+			iss.Callee = callee
+		}
+		d.issues = append(d.issues, iss)
 	}
 	return d
 }

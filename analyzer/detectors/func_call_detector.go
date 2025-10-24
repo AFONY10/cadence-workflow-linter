@@ -92,7 +92,7 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 		// Check regular function call rules first
 		if ruleMap, ok := d.functionSet[importPath]; ok {
 			if rule, ok := ruleMap[funcName]; ok {
-				d.createIssueIfInWorkflow(n, rule.Rule, rule.Severity, strings.ReplaceAll(rule.Message, "%FUNC%", funcName))
+				d.createIssueIfInWorkflow(n, rule.Rule, rule.Severity, strings.ReplaceAll(rule.Message, "%FUNC%", funcName), funcName)
 				return d
 			}
 		}
@@ -100,7 +100,7 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 		// Check external package rules
 		if extRuleMap, ok := d.externalFuncSet[importPath]; ok {
 			if extRule, ok := extRuleMap[funcName]; ok {
-				d.createIssueIfInWorkflow(n, extRule.Rule, extRule.Severity, strings.ReplaceAll(extRule.Message, "%FUNC%", funcName))
+				d.createIssueIfInWorkflow(n, extRule.Rule, extRule.Severity, strings.ReplaceAll(extRule.Message, "%FUNC%", funcName), funcName)
 				return d
 			}
 		}
@@ -123,6 +123,7 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 					Severity: "info",
 					Message:  fmt.Sprintf("Call to unknown external package %s.%s() - please verify it's workflow-safe", importPath, funcName),
 					Func:     d.currFunc,
+					Callee:   funcName,
 				})
 			}
 		}
@@ -131,7 +132,7 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 }
 
 // Helper method to create issue if in workflow context
-func (d *FuncCallDetector) createIssueIfInWorkflow(node *ast.SelectorExpr, rule, severity, message string) {
+func (d *FuncCallDetector) createIssueIfInWorkflow(node *ast.SelectorExpr, rule, severity, message, callee string) {
 	// Check if we're in a workflow context using canonical function name
 	canonicalCurrentFunc := d.pkgPath + "." + d.currFunc
 	if d.wr != nil && d.wr.IsWorkflowReachable(canonicalCurrentFunc) {
@@ -148,6 +149,7 @@ func (d *FuncCallDetector) createIssueIfInWorkflow(node *ast.SelectorExpr, rule,
 			Severity:  severity,
 			Message:   message,
 			Func:      d.currFunc,
+			Callee:    callee,
 			CallStack: callStack,
 		})
 	}

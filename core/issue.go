@@ -11,5 +11,6 @@ type Issue struct {
 	Severity  string   `json:"severity" yaml:"severity"`
 	Message   string   `json:"message" yaml:"message"`
 	Func      string   `json:"func,omitempty" yaml:"func,omitempty"`
+	Callee    string   `json:"callee,omitempty" yaml:"callee,omitempty"` // optional callee name used for %FUNC%
 	CallStack []string `json:"callstack,omitempty" yaml:"callstack,omitempty"`
 }

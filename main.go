@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/afony10/cadence-workflow-linter/analyzer"
+	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer"
 	"github.com/afony10/cadence-workflow-linter/analyzer/detectors"
 	"github.com/afony10/cadence-workflow-linter/analyzer/modutils"
 	"github.com/afony10/cadence-workflow-linter/config"
@@ -67,6 +67,10 @@ func main() {
 		fmt.Println("Scan error:", err)
 		os.Exit(1)
 	}
+
+	// Apply any overrides from the rules configuration so severities/messages
+	// are consistent with user config (maps config rule names -> core IDs)
+	issues = core.ApplyConfigOverrides(issues, rules)
 
 	switch format {
 	case "yaml", "yml":
