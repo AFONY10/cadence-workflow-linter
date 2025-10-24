@@ -23,11 +23,17 @@ function_calls:
     severity: warning
     message: "Detected fmt.%FUNC%() in workflow. Use workflow.GetLogger(ctx) instead."
 
+network_calls:
   - rule: Network
     package: net/http
     functions: [Get, Post, Do, Head]
     severity: error
     message: "Detected HTTP call in workflow. Use workflow activities for network calls."
+
+map_iteration:
+  - rule: MapIteration
+    severity: warning
+    message: "Detected map iteration in workflow. Map iteration order in Go is nondeterministic; sort keys or otherwise ensure deterministic behavior."
 
 disallowed_imports:
   - rule: ImportRandom
