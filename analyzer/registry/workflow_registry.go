@@ -253,6 +253,23 @@ func (wr *WorkflowRegistry) CallPathTo(target string) []string {
 	return nil
 }
 
+// IsReachableWithPath returns whether the canonical function is reachable from
+// any workflow function and, if so, one call path from a workflow to the target.
+// This is a convenience wrapper used by detectors that want both the boolean
+// reachability and an explanatory call stack.
+func (wr *WorkflowRegistry) IsReachableWithPath(target string) (bool, []string) {
+	// If the target itself is a workflow function, return immediately.
+	if wr.WorkflowFuncs[target] {
+		return true, []string{target}
+	}
+
+	path := wr.CallPathTo(target)
+	if path != nil && len(path) > 0 {
+		return true, path
+	}
+	return false, nil
+}
+
 // GetCallStack provides debugging information for call paths from workflow to target
 func (wr *WorkflowRegistry) GetCallStack(from, to string) []string {
 	visited := make(map[string]bool)

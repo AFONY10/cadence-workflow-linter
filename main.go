@@ -1,17 +1,15 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/afony10/cadence-workflow-linter/analyzer"
 	"github.com/afony10/cadence-workflow-linter/analyzer/detectors"
 	"github.com/afony10/cadence-workflow-linter/analyzer/modutils"
 	"github.com/afony10/cadence-workflow-linter/config"
+	"github.com/afony10/cadence-workflow-linter/core"
 
 	"go/ast"
 )
@@ -72,14 +70,14 @@ func main() {
 
 	switch format {
 	case "yaml", "yml":
-		out, mErr := yaml.Marshal(issues)
+		out, mErr := core.EmitYAML(issues)
 		if mErr != nil {
 			fmt.Println("Marshal error:", mErr)
 			os.Exit(1)
 		}
 		fmt.Print(string(out))
 	default:
-		out, mErr := json.MarshalIndent(issues, "", "  ")
+		out, mErr := core.EmitJSON(issues)
 		if mErr != nil {
 			fmt.Println("Marshal error:", mErr)
 			os.Exit(1)

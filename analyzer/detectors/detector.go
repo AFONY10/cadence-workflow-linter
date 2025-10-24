@@ -4,18 +4,13 @@ import (
 	"go/token"
 
 	"github.com/afony10/cadence-workflow-linter/analyzer/registry"
+	"github.com/afony10/cadence-workflow-linter/core"
 )
 
-type Issue struct {
-	File      string   `json:"file" yaml:"file"`
-	Line      int      `json:"line" yaml:"line"`
-	Column    int      `json:"column" yaml:"column"`
-	Rule      string   `json:"rule" yaml:"rule"`
-	Severity  string   `json:"severity" yaml:"severity"`
-	Message   string   `json:"message" yaml:"message"`
-	Func      string   `json:"func,omitempty" yaml:"func,omitempty"`           // function where the issue occurs
-	CallStack []string `json:"callstack,omitempty" yaml:"callstack,omitempty"` // optional path from workflow
-}
+// Issue is an alias to the canonical core.Issue. This keeps the public API of
+// the detectors package stable while consolidating the shared output schema in
+// the `core` package for future multi-language adapters.
+type Issue = core.Issue
 
 type WorkflowAware interface {
 	SetWorkflowRegistry(reg *registry.WorkflowRegistry)
