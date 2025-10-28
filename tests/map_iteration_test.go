@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/afony10/cadence-workflow-linter/analyzer"
-	"github.com/afony10/cadence-workflow-linter/analyzer/detectors"
-	"github.com/afony10/cadence-workflow-linter/analyzer/modutils"
+	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer"
+	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer/detectors"
+	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer/modutils"
 )
 
 // Test that map iteration inside a workflow is detected

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/afony10/cadence-workflow-linter/analyzer/detectors"
+	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer/detectors"
 	"github.com/afony10/cadence-workflow-linter/config"
 )
 

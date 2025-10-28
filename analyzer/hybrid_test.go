@@ -1,4 +1,4 @@
-package analyzer
+package analyzer_test
 
 import (
 	"go/ast"
@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/afony10/cadence-workflow-linter/analyzer/detectors"
-	"github.com/afony10/cadence-workflow-linter/analyzer/modutils"
+	adapAnalyzer "github.com/afony10/cadence-workflow-linter/adapters/go/analyzer"
+	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer/detectors"
+	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer/modutils"
 	"github.com/afony10/cadence-workflow-linter/config"
 )
 
@@ -107,7 +108,7 @@ func DoSomething() {
 	}
 
 	// Scan the temporary directory
-	issues, err := ScanDirectory(tempDir, factory)
+	issues, err := adapAnalyzer.ScanDirectory(tempDir, factory)
 	if err != nil {
 		t.Fatalf("Failed to scan directory: %v", err)
 	}
@@ -194,7 +195,7 @@ func FallbackTestWorkflow(ctx workflow.Context) error {
 	}
 
 	// Scan the file
-	issues, err := ScanFile(testFilePath, factory)
+	issues, err := adapAnalyzer.ScanFile(testFilePath, factory)
 	if err != nil {
 		t.Fatalf("Failed to scan file: %v", err)
 	}

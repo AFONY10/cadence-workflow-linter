@@ -6,8 +6,8 @@ import (
 	"os"
 
 	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer"
-	"github.com/afony10/cadence-workflow-linter/analyzer/detectors"
-	"github.com/afony10/cadence-workflow-linter/analyzer/modutils"
+	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer/detectors"
+	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer/modutils"
 	"github.com/afony10/cadence-workflow-linter/config"
 	"github.com/afony10/cadence-workflow-linter/core"
 
