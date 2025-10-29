@@ -18,7 +18,7 @@ const (
 )
 
 /* func helper() {
-	time.Now() // should be flagged
+time.Now() // should be flagged
 } */
 
 func DeliveryActivity(ctx context.Context, order Order) error {

@@ -16,7 +16,8 @@ func UnknownExternalWorkflow(ctx workflow.Context) error {
 
 	// Unknown external - should get info-level warning
 	result := mysterylib.DoSomething("data")
-	value := mysterylib.ProcessValue(42)
-
+	_ = result
+	_ = id
+	_ = err
 	return nil
 }

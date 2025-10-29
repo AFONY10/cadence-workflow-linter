@@ -1,4 +1,4 @@
-package tests
+package analyzer_test
 
 import (
 	"go/ast"

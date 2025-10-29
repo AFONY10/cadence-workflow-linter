@@ -1,8 +1,6 @@
 package app
 
 import (
-	"context"
-
 	"example.com/linttest/pkgutil"
 	"example.com/linttest/workflow"
 )
@@ -23,7 +21,7 @@ func TestWorkflow(ctx workflow.Context) error {
 }
 
 // Activity function that calls the same helper - should NOT trigger violation
-func TestActivity(ctx context.Context) error {
+func TestActivity(ctx workflow.Context) error {
 	timestamp := pkgutil.Helper() // Should be fine in activity
 	_ = timestamp
 	return nil

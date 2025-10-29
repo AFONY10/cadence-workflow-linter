@@ -7,6 +7,11 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+// Replace for local test module used in adapter testdata. This maps the
+// example.com/linttest module used by test fixtures into the nested testdata
+// module so the Go toolchain can resolve imports while running tests.
+replace example.com/linttest => ./adapters/go/tests/testdata/mod
+
 require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect

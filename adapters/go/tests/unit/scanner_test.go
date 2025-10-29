@@ -1,4 +1,4 @@
-package tests
+package analyzer_test
 
 import (
 	"go/ast"
@@ -89,7 +89,7 @@ func walkOnce(t *testing.T, v ast.Visitor, fset *token.FileSet, node *ast.File, 
 // --- tests -----------------------------------------------------------------
 
 func TestFuncCallDetector_TimeUsage(t *testing.T) {
-	rules, err := config.LoadRules("../config/rules.yaml")
+	rules, err := config.LoadRules("../../../../config/rules.yaml")
 	if err != nil {
 		t.Fatalf("load rules: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestFuncCallDetector_TimeUsage(t *testing.T) {
 }
 
 func TestFuncCallDetector_Randomness(t *testing.T) {
-	rules, err := config.LoadRules("../config/rules.yaml")
+	rules, err := config.LoadRules("../../../../config/rules.yaml")
 	if err != nil {
 		t.Fatalf("load rules: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestFuncCallDetector_Randomness(t *testing.T) {
 }
 
 func TestFuncCallDetector_IOCalls(t *testing.T) {
-	rules, err := config.LoadRules("../config/rules.yaml")
+	rules, err := config.LoadRules("../../../../config/rules.yaml")
 	if err != nil {
 		t.Fatalf("load rules: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestChannelDetector(t *testing.T) {
 }
 
 func TestActivityNotFlagged(t *testing.T) {
-	rules, err := config.LoadRules("../config/rules.yaml")
+	rules, err := config.LoadRules("../../../../config/rules.yaml")
 	if err != nil {
 		t.Fatalf("load rules: %v", err)
 	}

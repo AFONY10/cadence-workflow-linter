@@ -15,15 +15,17 @@ func ExternalLibraryWorkflow(ctx workflow.Context) error {
 
 	// Should be flagged - Redis operations should be in activities
 	rdb := redis.NewClient(&redis.Options{})
-	value := rdb.Get(ctx, "key")
+	_ = rdb
 
 	// Should NOT be flagged - pkg/errors is in safe list
 	err := errors.New("test error")
+	_ = err
 
 	// Should NOT be flagged - zap logging is in safe list
 	logger := zap.NewNop()
 	logger.Info("workflow started")
 
+	_ = id
 	return nil
 }
 
@@ -31,5 +33,6 @@ func ExternalLibraryWorkflow(ctx workflow.Context) error {
 func ExternalLibraryActivity() error {
 	// Even though this uses UUID, it's in an activity so shouldn't be flagged
 	id := uuid.New()
+	_ = id
 	return nil
 }
