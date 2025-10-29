@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"testing"
 	"time"
 
 	"go.uber.org/cadence"
@@ -161,7 +162,6 @@ func validatePayment(ctx context.Context, order Order) (string, error) {
 	activity.GetLogger(ctx).Info("Payment processed successfully")
 	return "payment validation successful", nil
 }
-
 func shipProduct(ctx context.Context, order Order) (string, error) {
 	// Simulate shipping the product
 	if order.Customer == "" {
@@ -169,4 +169,8 @@ func shipProduct(ctx context.Context, order Order) (string, error) {
 	}
 
 	return "shipping successful", nil
+}
+
+func TestFileBuild(t *testing.T) {
+	// Dummy test to ensure tools recognize this file as a test file.
 }

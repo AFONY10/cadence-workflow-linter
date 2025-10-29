@@ -223,7 +223,7 @@ func (wr *WorkflowRegistry) IsReachableWithPath(target string) (bool, []string) 
 		return true, []string{target}
 	}
 	path := wr.CallPathTo(target)
-	if path != nil && len(path) > 0 {
+	if len(path) > 0 {
 		return true, path
 	}
 	return false, nil
