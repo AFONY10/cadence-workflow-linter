@@ -46,7 +46,6 @@ func (d *GoroutineDetector) Visit(node ast.Node) ast.Visitor {
 		iss := Issue{
 			File:     d.ctx.File,
 			Line:     pos.Line,
-			Column:   pos.Column,
 			Rule:     "Concurrency",
 			Severity: "error",
 			Message:  "Detected goroutine. Use workflow.Go(ctx) inside workflows.",

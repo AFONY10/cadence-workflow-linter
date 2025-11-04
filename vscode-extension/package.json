@@ -28,8 +28,8 @@
       "properties": {
         "cadenceLinter.cliPath": {
           "type": "string",
-          "default": "cadence-workflow-linter.exe",
-          "description": "Path to the cadence-workflow-linter CLI executable (absolute or relative to workspace root)."
+          "default": "cadence-linter",
+          "description": "Path to the cadence-workflow-linter CLI executable (absolute or relative to workspace root). If not present, the extension will try 'go run ./cmd/cadence-linter' as a fallback when Go is available."
         },
         "cadenceLinter.runOnSave": {
           "type": "boolean",

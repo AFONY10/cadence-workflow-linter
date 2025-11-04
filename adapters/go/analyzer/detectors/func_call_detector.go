@@ -118,7 +118,6 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 				d.issues = append(d.issues, Issue{
 					File:     d.ctx.File,
 					Line:     pos.Line,
-					Column:   pos.Column,
 					Rule:     "UnknownExternalCall",
 					Severity: "info",
 					Message:  fmt.Sprintf("Call to unknown external package %s.%s() - please verify it's workflow-safe", importPath, funcName),
@@ -144,7 +143,6 @@ func (d *FuncCallDetector) createIssueIfInWorkflow(node *ast.SelectorExpr, rule,
 		d.issues = append(d.issues, Issue{
 			File:      d.ctx.File,
 			Line:      pos.Line,
-			Column:    pos.Column,
 			Rule:      rule,
 			Severity:  severity,
 			Message:   message,

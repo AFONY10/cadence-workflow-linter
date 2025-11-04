@@ -54,7 +54,6 @@ func EmitSARIF(issues []Issue) ([]byte, error) {
 		loc := location{}
 		loc.PhysicalLocation.ArtifactLocation.URI = iss.File
 		loc.PhysicalLocation.Region.StartLine = iss.Line
-		loc.PhysicalLocation.Region.StartColumn = iss.Column
 		r.Locations = []location{loc}
 		results = append(results, r)
 	}

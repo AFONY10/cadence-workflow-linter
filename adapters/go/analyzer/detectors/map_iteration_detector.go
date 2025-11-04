@@ -209,7 +209,6 @@ func (d *MapIterationDetector) addIssueWithStack(n ast.Node, rule, severity, mes
 	iss := Issue{
 		File:     d.ctx.File,
 		Line:     pos.Line,
-		Column:   pos.Column,
 		Rule:     rule,
 		Severity: severity,
 		Message:  message,

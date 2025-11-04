@@ -38,7 +38,6 @@ func (d *ImportDetector) Visit(node ast.Node) ast.Visitor {
 				d.issues = append(d.issues, Issue{
 					File:     d.ctx.File,
 					Line:     pos.Line,
-					Column:   pos.Column,
 					Rule:     r.Rule,
 					Severity: r.Severity,
 					Message:  r.Message,

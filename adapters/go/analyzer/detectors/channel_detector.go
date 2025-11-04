@@ -34,7 +34,6 @@ func (d *ChannelDetector) Visit(node ast.Node) ast.Visitor {
 					d.issues = append(d.issues, Issue{
 						File:     d.ctx.File,
 						Line:     pos.Line,
-						Column:   pos.Column,
 						Rule:     "Concurrency",
 						Severity: "error",
 						Message:  "Detected channel creation. Use workflow.Channel(ctx) inside workflows.",
