@@ -3,12 +3,19 @@
   "displayName": "Cadence Workflow Linter",
   "description": "VS Code extension that runs the cadence-workflow-linter CLI and shows issues as diagnostics.",
   "version": "0.1.0",
+  "publisher": "AFONY10",
   "engines": {
     "vscode": "^1.60.0"
   },
   "categories": [
     "Linters"
   ],
+  "files": ["out/**", "resources/**", "README.md"],
+  "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AFONY10/cadence-worflow-linter"
+  },
   "activationEvents": [
     "onLanguage:go",
     "onCommand:cadenceLinter.run",

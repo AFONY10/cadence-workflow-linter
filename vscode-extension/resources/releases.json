@@ -1,0 +1,12 @@
+{
+  "owner": "AFONY10",
+  "repo": "cadence-worflow-linter",
+  "tag": "latest",
+  "artifacts": {
+    "win32_x64": "cadence-linter-windows-amd64.exe",
+    "darwin_arm64": "cadence-linter-darwin-arm64",
+    "darwin_amd64": "cadence-linter-darwin-amd64",
+    "linux_x64": "cadence-linter-linux-amd64",
+    "linux_arm64": "cadence-linter-linux-arm64"
+  }
+}

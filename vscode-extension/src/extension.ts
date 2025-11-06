@@ -1,6 +1,12 @@
 import * as vscode from 'vscode';
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as https from 'https';
+import * as stream from 'stream';
+import { promisify } from 'util';
+const pipeline = promisify(stream.pipeline);
 
 interface CliIssue {
   file: string;
@@ -17,8 +23,10 @@ let debounceTimer: NodeJS.Timeout | undefined;
 const DEBOUNCE_MS = 500;
 // Keep last-run issues for hover provider
 const lastIssues: Map<string, CliIssue[]> = new Map();
+let extContext: vscode.ExtensionContext | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
+  extContext = context;
   diagnosticCollection = vscode.languages.createDiagnosticCollection('cadence-workflow-linter');
   context.subscriptions.push(diagnosticCollection);
   outputChannel = vscode.window.createOutputChannel('Cadence Workflow Linter');
@@ -74,9 +82,143 @@ function scheduleRunLinter(uri?: vscode.Uri) {
   debounceTimer = setTimeout(() => runLinter(uri), DEBOUNCE_MS);
 }
 
+// Helper: read releases manifest bundled with the extension
+function readReleasesManifest(): { owner: string; repo: string; tag: string; artifacts: any } | null {
+  try {
+    if (!extContext) return null;
+    const p = path.join(extContext.extensionPath, 'resources', 'releases.json');
+    const b = fs.readFileSync(p, 'utf8');
+    return JSON.parse(b);
+  } catch (e) {
+    outputChannel.appendLine('Failed to read releases manifest: ' + String(e));
+    return null;
+  }
+}
+
+function artifactNameForPlatform(manifest: any): string | null {
+  const plat = process.platform; // 'win32','darwin','linux'
+  const arch = process.arch; // 'x64','arm64', etc.
+  const key = plat === 'win32' ? `win32_x64` : (plat === 'darwin' ? (arch === 'arm64' ? 'darwin_arm64' : 'darwin_amd64') : (arch === 'arm64' ? 'linux_arm64' : 'linux_x64'));
+  return manifest && manifest.artifacts && manifest.artifacts[key] ? manifest.artifacts[key] : null;
+}
+
+async function downloadArtifactTo(extDir: string, url: string, filename: string): Promise<string> {
+  const destDir = path.join(extDir, 'bin');
+  if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+  const dest = path.join(destDir, filename);
+  const tmp = dest + '.tmp';
+  return new Promise<string>((resolve, reject) => {
+    const req = https.get(url, (res) => {
+      if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+        reject(new Error('Download failed with status ' + res.statusCode));
+        return;
+      }
+      const fileStream = fs.createWriteStream(tmp, { mode: 0o755 });
+      res.pipe(fileStream);
+      fileStream.on('finish', () => {
+        fileStream.close();
+        try {
+          fs.renameSync(tmp, dest);
+          if (process.platform !== 'win32') {
+            try { fs.chmodSync(dest, 0o755); } catch (e) {}
+          }
+          resolve(dest);
+        } catch (e) { reject(e); }
+      });
+      fileStream.on('error', (err) => { reject(err); });
+    });
+    req.on('error', (err) => reject(err));
+  });
+}
+
+function findInPath(names: string[]): string | null {
+  const envPath = process.env.PATH || '';
+  const parts = envPath.split(path.delimiter);
+  for (const dir of parts) {
+    for (const n of names) {
+      const candidate = path.join(dir, n);
+      if (fs.existsSync(candidate)) return candidate;
+      // Windows may have .exe implicit, check with .exe
+      if (process.platform === 'win32' && !n.endsWith('.exe')) {
+        const c2 = candidate + '.exe';
+        if (fs.existsSync(c2)) return c2;
+      }
+    }
+  }
+  return null;
+}
+
+async function resolveCliPath(cfg: vscode.WorkspaceConfiguration, cwd: string): Promise<string> {
+  // 1) user-configured path
+  const configured = cfg.get<string>('cliPath');
+  if (configured && fs.existsSync(configured)) return configured;
+
+  // 2) previously downloaded binary in globalStorage
+  if (extContext) {
+    const saved = extContext.globalState.get<string>('downloadedCliPath');
+    if (saved && fs.existsSync(saved)) return saved;
+  }
+
+  // 3) check workspace common locations
+  const manifest = readReleasesManifest();
+  const artifact = artifactNameForPlatform(manifest);
+  const candPaths: string[] = [];
+  if (artifact) {
+    candPaths.push(path.join(cwd, '.vscode', '.cadence-linter', 'bin', artifact));
+    candPaths.push(path.join(cwd, 'bin', artifact));
+  }
+  for (const p of candPaths) if (fs.existsSync(p)) return p;
+
+  // 4) check PATH for common binary names
+  const names = ['cadence-linter', 'cadence-workflow-linter', 'cadence-workflow-linter.exe', 'cadence-linter.exe'];
+  const found = findInPath(names);
+  if (found) return found;
+
+  // 5) try to download from Releases (manifest provides artifact name)
+  if (manifest && artifact) {
+    try {
+      if (!extContext) throw new Error('extension context not set');
+      const owner = manifest.owner;
+      const repo = manifest.repo;
+      const tag = manifest.tag || 'latest';
+      // construct download url for latest
+      const url = `https://github.com/${owner}/${repo}/releases/${tag === 'latest' ? 'latest/download' : 'download/' + tag}/${artifact}`;
+      outputChannel.appendLine(`Downloading CLI from ${url} ...`);
+      const binPath = await downloadArtifactTo(extContext.globalStoragePath, url, artifact);
+      // store
+      try { extContext.globalState.update('downloadedCliPath', binPath); } catch (e) {}
+      return binPath;
+    } catch (e) {
+      outputChannel.appendLine('CLI download failed: ' + String(e));
+    }
+  }
+
+  // nothing found
+  return configured || 'cadence-workflow-linter';
+}
+
+function resolveRulesPath(cwd: string): string {
+  // prefer workspace rules
+  const wkRules = path.join(cwd, 'config', 'rules.yaml');
+  if (fs.existsSync(wkRules)) return wkRules;
+  // fallback: copy extension default rules to temp and return path
+  if (extContext) {
+    try {
+      const src = path.join(extContext.extensionPath, 'resources', 'default-rules.yaml');
+      if (fs.existsSync(src)) {
+        const dest = path.join(os.tmpdir(), `cadence-linter-rules-${Date.now()}.yaml`);
+        fs.copyFileSync(src, dest);
+        return dest;
+      }
+    } catch (e) {
+      outputChannel.appendLine('Failed to copy default rules: ' + String(e));
+    }
+  }
+  return wkRules; // last resort (may not exist)
+}
+
 async function runLinter(targetUri?: vscode.Uri) {
   const cfg = vscode.workspace.getConfiguration('cadenceLinter');
-  const cliPath = cfg.get<string>('cliPath', 'cadence-workflow-linter.exe');
   const extraArgs = cfg.get<string[]>('args', []);
 
   const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -87,11 +229,12 @@ async function runLinter(targetUri?: vscode.Uri) {
   const cwd = workspaceFolders[0].uri.fsPath;
 
   const args = ['--format', 'json'].concat(extraArgs);
-  if (targetUri) {
-    args.push(targetUri.fsPath);
-  } else {
-    args.push(cwd);
-  }
+  // resolve CLI path (may download) and rules path before finalizing args
+  const cliPath = await resolveCliPath(cfg, cwd);
+  const rulesPath = resolveRulesPath(cwd);
+  // push rules path
+  args.push('--rules', rulesPath);
+  if (targetUri) args.push(targetUri.fsPath); else args.push(cwd);
 
   outputChannel.appendLine(`Running: ${cliPath} ${args.map(a => a.includes(' ') ? '"' + a + '"' : a).join(' ')}`);
 
@@ -128,7 +271,7 @@ async function runLinter(targetUri?: vscode.Uri) {
         let result = await spawnAndCollect(cliPath, args);
         if (result.err && (result.err as any).code === 'ENOENT') {
           outputChannel.appendLine(`Configured CLI not found: ${cliPath} — attempting 'go run ./cmd/cadence-linter' fallback`);
-          const goArgs = ['run', './cmd/cadence-linter', '--format', 'json'].concat(extraArgs);
+          const goArgs = ['run', './cmd/cadence-linter', '--format', 'json', '--rules', rulesPath].concat(extraArgs);
           if (targetUri) goArgs.push(targetUri.fsPath); else goArgs.push(cwd);
           result = await spawnAndCollect('go', goArgs);
         }
