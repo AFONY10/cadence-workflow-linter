@@ -75,7 +75,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          # Use Node 20.x to satisfy modern package engine requirements (undici, vsce)
+          node-version: '20.18.1'
 
       - name: Install npm deps
         working-directory: vscode-extension
