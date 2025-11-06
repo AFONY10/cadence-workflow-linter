@@ -1,5 +1,12 @@
 name: Build & Release
 
+# Grant the workflow permission to create Releases and write repository contents.
+# The default GITHUB_TOKEN permission may be read-only depending on repo settings;
+# explicitly request write access so the softprops release action can create releases.
+permissions:
+  contents: write
+  packages: write
+
 on:
   push:
     tags: ['v*']
