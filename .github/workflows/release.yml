@@ -58,8 +58,12 @@ jobs:
       - name: Upload CLI artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: cli-artifacts
-          path: dist/*
+          # make the artifact name unique per matrix entry to avoid 409 conflicts
+          name: cli-artifacts-${{ matrix.goos }}-${{ matrix.arch }}
+          # upload only the built binary and its checksum
+          path: |
+            dist/${{ matrix.out }}
+            dist/${{ matrix.out }}.sha256
 
   package-vsix:
     name: Package VSIX
@@ -75,7 +79,8 @@ jobs:
 
       - name: Install npm deps
         working-directory: vscode-extension
-        run: npm ci
+        # `npm ci` requires a package-lock.json; fall back to `npm install` if absent
+        run: npm ci || npm install --no-audit --no-fund
 
       - name: Compile extension
         working-directory: vscode-extension
@@ -99,17 +104,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download CLI artifacts
+      - name: Download all artifacts
+        # download everything uploaded by earlier jobs into ./artifacts
         uses: actions/download-artifact@v4
         with:
-          name: cli-artifacts
-          path: ./dist
+          path: ./artifacts
 
-      - name: Download VSIX artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: vsix-artifact
-          path: ./vscode-extension
+      - name: Move artifacts into release paths
+        run: |
+          mkdir -p dist
+          mkdir -p vscode-extension
+          # find and copy binaries and checksums into dist/
+          find artifacts -type f -name 'cadence-linter-*' -exec cp {} dist/ \;
+          # find and copy the vsix into vscode-extension/
+          find artifacts -type f -name '*.vsix' -exec cp {} vscode-extension/ \;
 
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v1
