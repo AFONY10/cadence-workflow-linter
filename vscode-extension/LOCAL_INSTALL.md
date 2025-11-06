@@ -108,5 +108,3 @@ It's recommended to publish a checksum file (SHA256) for each artifact and modif
 If you want, I can now:
 - Scaffold a GitHub Actions workflow that cross-builds these binaries and creates a Release artifacts (so auto-download works), or
 - Implement checksum verification in the extension now (if you prefer to handle security first).
-
-Which should I do next?

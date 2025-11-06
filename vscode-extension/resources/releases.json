@@ -1,6 +1,6 @@
 {
   "owner": "AFONY10",
-  "repo": "cadence-worflow-linter",
+  "repo": "cadence-workflow-linter",
   "tag": "latest",
   "artifacts": {
     "win32_x64": "cadence-linter-windows-amd64.exe",

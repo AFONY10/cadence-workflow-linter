@@ -127,11 +127,47 @@ jobs:
           # find and copy the vsix into vscode-extension/
           find artifacts -type f -name '*.vsix' -exec cp {} vscode-extension/ \;
 
+      - name: Create manifest.json (artifact checksums)
+        run: |
+          # determine tag name from ref
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Creating manifest for tag $TAG"
+          cd dist
+          # build a JSON manifest with artifact -> sha256 mapping
+          echo -n "{" > ../manifest.json
+          echo -n "\"tag\":\"$TAG\"," >> ../manifest.json
+          echo -n "\"artifacts\":{" >> ../manifest.json
+          first=1
+          for f in *; do
+            # skip checksum files themselves
+            case "$f" in
+              *.sha256) continue ;;
+            esac
+            shafile="$f.sha256"
+            if [ -f "$shafile" ]; then
+              sha=$(cat "$shafile" | awk '{print $1}')
+            else
+              # fallback: compute sha256 if file present but no .sha256
+              sha=$(sha256sum "$f" | awk '{print $1}')
+            fi
+            if [ $first -eq 1 ]; then
+              first=0
+            else
+              echo -n "," >> ../manifest.json
+            fi
+            # escape filename and write
+            esc=$(printf '%s' "$f" | sed 's/"/\\\"/g')
+            echo -n "\"$esc\":\"$sha\"" >> ../manifest.json
+          done
+          echo -n "}}" >> ../manifest.json
+          echo "Wrote manifest: $(wc -c ../manifest.json) bytes"
+
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v1
         with:
           files: |
             dist/*
             vscode-extension/*.vsix
+            manifest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -105,14 +105,35 @@ VS Code extension guidance
   using SARIF or JSON output so the extension can parse and present results in
   the Problems view.
 
-Next steps I can do for you
-- Remove the old `analyzer/` directory to leave a single canonical copy under
-  `adapters/go/analyzer` (I can perform the removal and re-run tests).
-- Create a migration PR with a succinct commit message and migration notes.
-- Wire the VS Code extension to call the CLI and parse SARIF output.
+# Progress and next steps
 
-If you'd like, I can now: (A) remove the old `analyzer/` directory, or (B)
-produce a migration PR template and commit message. Which should I do next?
+Recent work completed
+
+- Refactored the repository into a monorepo layout with `core/`, `adapters/go`, `cmd/`, and a `vscode-extension`.
+- Implemented a types-aware MapIteration detector and updated detectors to emit a canonical `core.Issue` schema.
+- Built a prototype VS Code extension that runs the CLI, parses JSON, shows diagnostics and hovers, and can auto-download platform binaries from Releases.
+- Added a GitHub Actions release workflow that cross-builds CLI binaries, packages the VSIX, generates checksums, and uploads everything to a Release when a `v*` tag is pushed.
+
+Recommended next steps (pick one or more)
+
+1. Release housekeeping (recommended now)
+  - Bump the extension version in `vscode-extension/package.json` and add a short `CHANGELOG.md` entry.
+  - Create an annotated git tag (e.g. `v0.1.2`) to trigger the release workflow. The workflow will attach cross-platform binaries and the VSIX to the Release.
+
+2. Security: checksum verification (high priority)
+  - Implement SHA256 verification in the extension so downloaded binaries are verified against the `.sha256` files created by CI before execution.
+
+3. Testing & QA
+  - Add more unit tests (map-iteration cross-file cases, aliasing, method receivers) and run the test matrix across platforms.
+  - Perform E2E tests on clean VMs (Windows/macOS/Linux) to confirm auto-download + execution works.
+
+4. Publish & distribution
+  - Optionally publish the extension to the Visual Studio Marketplace (requires creating a publisher and storing a PAT in GitHub secrets). Alternatively, distribute the VSIX from Releases.
+
+5. Documentation & migration
+  - Finalize migration notes and produce a short PR template explaining how to add adapters and where to look for detectors.
+
+If you want, I can (A) prepare the release commit (bump + changelog) and create the tag for you, (B) add checksum verification to the extension now, or (C) generate a polished migration PR and update the top-level docs further. Tell me which you'd like me to do next.
 # Cadence Static Analyzer (Go)
 
 This is a prototype CLI tool that performs static analysis on Go Cadence workflow code. Its purpose is to detect potentially non-deterministic code that could break workflow replay or versioning.

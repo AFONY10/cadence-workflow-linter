@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as https from 'https';
+import * as crypto from 'crypto';
 import * as stream from 'stream';
 import { promisify } from 'util';
 const pipeline = promisify(stream.pipeline);
@@ -107,27 +108,87 @@ async function downloadArtifactTo(extDir: string, url: string, filename: string)
   if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
   const dest = path.join(destDir, filename);
   const tmp = dest + '.tmp';
+  // Follow HTTP redirects (GitHub release asset URLs redirect to an S3/fastly URL)
+  const maxRedirects = 5;
   return new Promise<string>((resolve, reject) => {
-    const req = https.get(url, (res) => {
-      if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-        reject(new Error('Download failed with status ' + res.statusCode));
-        return;
-      }
-      const fileStream = fs.createWriteStream(tmp, { mode: 0o755 });
-      res.pipe(fileStream);
-      fileStream.on('finish', () => {
-        fileStream.close();
-        try {
-          fs.renameSync(tmp, dest);
-          if (process.platform !== 'win32') {
-            try { fs.chmodSync(dest, 0o755); } catch (e) {}
+    const fetch = (u: string, redirectsLeft: number) => {
+      const req = https.get(u, (res) => {
+        // Handle redirects
+        if (res.statusCode && [301, 302, 303, 307, 308].includes(res.statusCode)) {
+          const loc = res.headers.location;
+          if (loc && redirectsLeft > 0) {
+            // follow redirect
+            res.resume(); // discard body
+            return fetch(loc, redirectsLeft - 1);
           }
-          resolve(dest);
-        } catch (e) { reject(e); }
+          reject(new Error('Too many redirects or missing Location header'));
+          return;
+        }
+
+        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error('Download failed with status ' + res.statusCode));
+          return;
+        }
+
+        const fileStream = fs.createWriteStream(tmp, { mode: 0o755 });
+        res.pipe(fileStream);
+        fileStream.on('finish', () => {
+          fileStream.close();
+          try {
+            fs.renameSync(tmp, dest);
+            if (process.platform !== 'win32') {
+              try { fs.chmodSync(dest, 0o755); } catch (e) {}
+            }
+            resolve(dest);
+          } catch (e) { reject(e); }
+        });
+        fileStream.on('error', (err) => { reject(err); });
       });
-      fileStream.on('error', (err) => { reject(err); });
-    });
-    req.on('error', (err) => reject(err));
+      req.on('error', (err) => reject(err));
+    };
+
+    fetch(url, maxRedirects);
+  });
+}
+
+// Fetch JSON from a URL, following redirects (max 5)
+async function fetchJson(url: string): Promise<any> {
+  const maxRedirects = 5;
+  return new Promise<any>((resolve, reject) => {
+    const fetch = (u: string, redirectsLeft: number) => {
+      const req = https.get(u, (res) => {
+        if (res.statusCode && [301,302,303,307,308].includes(res.statusCode)) {
+          const loc = res.headers.location;
+          if (loc && redirectsLeft > 0) {
+            res.resume();
+            return fetch(loc, redirectsLeft - 1);
+          }
+          reject(new Error('Too many redirects or missing Location header'));
+          return;
+        }
+        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error('Request failed with status ' + res.statusCode));
+          return;
+        }
+        let body = '';
+        res.on('data', (chunk) => { body += chunk.toString(); });
+        res.on('end', () => {
+          try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+        });
+      });
+      req.on('error', (err) => reject(err));
+    };
+    fetch(url, maxRedirects);
+  });
+}
+
+function computeFileSha256(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const rs = fs.createReadStream(filePath);
+    rs.on('error', (err) => reject(err));
+    rs.on('data', (chunk) => hash.update(chunk));
+    rs.on('end', () => resolve(hash.digest('hex')));
   });
 }
 
@@ -151,7 +212,12 @@ function findInPath(names: string[]): string | null {
 async function resolveCliPath(cfg: vscode.WorkspaceConfiguration, cwd: string): Promise<string> {
   // 1) user-configured path
   const configured = cfg.get<string>('cliPath');
-  if (configured && fs.existsSync(configured)) return configured;
+  if (configured) {
+    // If the user provided an explicit path that exists on disk, use it.
+    if (fs.existsSync(configured)) return configured;
+    // If the configured value looks like a filename or a wrong path, log and continue
+    outputChannel.appendLine(`Configured CLI path set but not found: ${configured}; will attempt discovery/download instead`);
+  }
 
   // 2) previously downloaded binary in globalStorage
   if (extContext) {
@@ -181,20 +247,59 @@ async function resolveCliPath(cfg: vscode.WorkspaceConfiguration, cwd: string): 
       const owner = manifest.owner;
       const repo = manifest.repo;
       const tag = manifest.tag || 'latest';
-      // construct download url for latest
-      const url = `https://github.com/${owner}/${repo}/releases/${tag === 'latest' ? 'latest/download' : 'download/' + tag}/${artifact}`;
-      outputChannel.appendLine(`Downloading CLI from ${url} ...`);
-      const binPath = await downloadArtifactTo(extContext.globalStoragePath, url, artifact);
-      // store
-      try { extContext.globalState.update('downloadedCliPath', binPath); } catch (e) {}
-      return binPath;
+      // Try to fetch manifest.json from the Release (so we can verify checksums)
+      try {
+        const manifestUrl = `https://github.com/${owner}/${repo}/releases/${tag === 'latest' ? 'latest/download' : 'download/' + tag}/manifest.json`;
+        outputChannel.appendLine(`Fetching release manifest from ${manifestUrl} ...`);
+        const remoteManifest = await fetchJson(manifestUrl);
+        const artifactsMap = remoteManifest && remoteManifest.artifacts ? remoteManifest.artifacts : null;
+        const expectedSha = artifactsMap ? artifactsMap[artifact] : null;
+
+        // If we previously downloaded a CLI, check if its checksum matches the remote manifest
+        if (extContext) {
+          const savedPath = extContext.globalState.get<string>('downloadedCliPath');
+          const savedSha = extContext.globalState.get<string>('downloadedCliChecksum');
+          const savedTag = extContext.globalState.get<string>('downloadedCliTag');
+          if (savedPath && fs.existsSync(savedPath) && expectedSha && savedSha === expectedSha && savedTag === (remoteManifest.tag || tag)) {
+            outputChannel.appendLine('Using previously-downloaded CLI (checksum matches manifest)');
+            return savedPath;
+          }
+        }
+
+        // Download the artifact and verify checksum
+        const url = `https://github.com/${owner}/${repo}/releases/${tag === 'latest' ? 'latest/download' : 'download/' + tag}/${artifact}`;
+        outputChannel.appendLine(`Downloading CLI from ${url} ...`);
+        const binPath = await downloadArtifactTo(extContext.globalStoragePath, url, artifact);
+        if (expectedSha) {
+          const realSha = await computeFileSha256(binPath);
+          if (realSha !== expectedSha) {
+            // delete bad file
+            try { fs.unlinkSync(binPath); } catch (e) {}
+            throw new Error(`Downloaded file checksum mismatch: expected ${expectedSha} got ${realSha}`);
+          }
+        } else {
+          outputChannel.appendLine('Warning: no expected checksum in manifest; skipping verification');
+        }
+
+        // store path, checksum and tag
+        try { await extContext.globalState.update('downloadedCliPath', binPath); await extContext.globalState.update('downloadedCliChecksum', expectedSha || ''); await extContext.globalState.update('downloadedCliTag', remoteManifest.tag || tag); } catch (e) {}
+        return binPath;
+      } catch (e) {
+        outputChannel.appendLine('Release manifest fetch/verify failed: ' + String(e));
+        // fallback: attempt direct download without manifest
+        const url = `https://github.com/${owner}/${repo}/releases/${tag === 'latest' ? 'latest/download' : 'download/' + tag}/${artifact}`;
+        outputChannel.appendLine(`Downloading CLI from ${url} ...`);
+        const binPath = await downloadArtifactTo(extContext.globalStoragePath, url, artifact);
+        try { extContext.globalState.update('downloadedCliPath', binPath); } catch (e) {}
+        return binPath;
+      }
     } catch (e) {
       outputChannel.appendLine('CLI download failed: ' + String(e));
     }
   }
 
-  // nothing found
-  return configured || 'cadence-workflow-linter';
+  // nothing found — do NOT return a non-existent configured path; return a fallback
+  return 'cadence-workflow-linter';
 }
 
 function resolveRulesPath(cwd: string): string {
