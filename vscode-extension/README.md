@@ -1,73 +1,53 @@
-Cadence Workflow Linter — VS Code Extension
+# Cadence Workflow Linter — VS Code Extension
 
-This VS Code extension runs the `cadence-workflow-linter` CLI and surfaces issues as Problems/Diagnostics. It will either use a configured CLI, a workspace-local binary, or (if none found) automatically download the correct prebuilt binary from GitHub Releases.
+## About
+  The Cadence Workflow Linter extension runs the `cadence-workflow-linter` CLI and surfaces issues as VS Code Problems/Diagnostics. The extension is small and ships without binaries: it will prefer a configured CLI binary, then a workspace or PATH binary, and — if none are found — will auto-download the correct platform binary from the repository's GitHub Release.
 
-Quick start (for testers)
+## Features
 
-1. Install the VSIX (from a Release in GitHub or built locally)
+  - Problems panel diagnostics for linter findings
+  - Output channel with discovery, download, checksum and run logs
+  - Hover support for reported issues
+  - Commands: run linter and check/download CLI updates
 
-To build locally:
-```powershell
-# from repository folder
-cd vscode-extension
-npx vsce package --no-dependencies    # produces a .vsix
-code --install-extension ./cadence-workflow-linter-vscode-*.vsix
-```
+## Get it from GitHub (quick)
 
-To get VSIX from Release in GitHub: 
-![Get VSIX Step 1 ](image.png)
-![Get VSIX Step 2](image-1.png)
-![Get VSIX Step 3](image-2.png)
-![Get VSIX Step 4](image-3.png)
+  1. Open this repository's Releases page (see the annotated screenshots below).
+  2. Download the `.vsix` asset for the release you want to test.
+  3. In VS Code → Extensions view → menu (...) → "Install from VSIX..." → select the downloaded file.
+
+  Or build locally (optional):
+
+  ```powershell
+  cd vscode-extension
+  npx vsce package --no-dependencies
+  # produces a cadence-workflow-linter-vscode-<version>.vsix file
+  ```
+
+## How to use
+
+  - Logs: View → Output → select "Cadence Workflow Linter" to see discovery, download and run logs.
+  - Problems: View → Problems shows all reported issues from the linter.
+  - Run on save: toggle `cadenceLinter.runOnSave` (default: true) to run the linter automatically when saving files.
+  - Commands (Command Palette):
+    - "Cadence Workflow Linter: Run" — run the linter immediately
+    - "Cadence Workflow Linter: Check for CLI update" — fetch the release manifest and attempt to download the platform-specific CLI
 
 
-2. Open the workspace you want to test and verify settings
+## Annotated screenshots (on how to get the extenstion)
 
-- Optional: To force a local binary, create `.vscode/settings.json` and set `cadenceLinter.cliPath` (absolute or relative to the workspace root):
+### 1) Open the Release
+![Get VSIX Step 1](./docs/images/image.png)
+- Open the GitHub repository Releases page and click the latest release you want to test.
 
-```json
-{
-  "cadenceLinter.cliPath": "./bin/cadence-linter.exe",
-  "cadenceLinter.runOnSave": true,
-  "cadenceLinter.args": ["--format","json"]
-}
-```
+### 2) Download the VSIX from Assets
+![Get VSIX Step 2](./docs/images/image-1.png)
+- In the Release's Assets section, download the `.vsix` file (the packaged extension) to your machine.
 
-- To exercise the auto-download path, remove `cadenceLinter.cliPath` from settings and ensure you have network access; the extension will download the correct binary from Releases and store it in its global storage.
+### 3) Install from VSIX in VS Code
+![Get VSIX Step 3](./docs/images/image-2.png)
+- In VS Code Extensions view, select the menu (⋯) and choose "Install from VSIX...", then pick the downloaded file.
 
-3. Watch the Output panel
-
-Open View → Output and select "Cadence Workflow Linter" to see discovery, download, and run logs. The extension always injects an absolute `--rules <path>` to avoid missing-rules errors.
-
-Development & debugging
-
-- Install dependencies and compile the extension runtime
-
-```powershell
-cd vscode-extension
-npm ci
-npm run compile
-```
-
-- Run in the Extension Development Host (press F5 in VS Code).
-
-Configuration
-
-- `cadenceLinter.cliPath` (string): optional absolute or workspace-relative path to a CLI binary. If set and valid the extension will use it and skip downloading.
-- `cadenceLinter.runOnSave` (boolean): run on save (default: true).
-- `cadenceLinter.args` (string[]): extra CLI arguments to pass.
-
-Notes for testers
-
-- The extension will attempt to download platform-specific binaries from the GitHub Release attached to the same repository. For auto-download to work the Release must contain assets named exactly as listed in `resources/releases.json` (e.g. `cadence-linter-windows-amd64.exe`).
-- The extension will store downloaded binaries in extension global storage and re-use them between sessions.
-- For extra safety we recommend verifying checksums (the CI workflow produces `.sha256` files next to each binary). The extension will be updated to verify checksums automatically in a follow-up.
-
-Troubleshooting
-
-- If you see `Configured CLI path set but not found`, check `.vscode/settings.json` and either correct the path or remove the setting to let the extension discover/download a binary.
-- If download fails, check the Output panel for the exact download URL and try opening it in a browser to see HTTP status or errors.
-
-Contact / Feedback
-
-Open an issue in this repository if you run into problems while testing.
+### 4) Reload & verify
+![Get VSIX Step 4](./docs/images/image-3.png)
+- After installation, reload the window if prompted. Open the Output panel and select "Cadence Workflow Linter" to see activation logs.

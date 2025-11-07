@@ -10,7 +10,7 @@
   "categories": [
     "Linters"
   ],
-  "files": ["out/**", "resources/**", "README.md"],
+  "files": ["out/**", "resources/**", "README.md", "docs/**"],
   "icon": "resources/icon.png",
   "repository": {
     "type": "git",
@@ -19,6 +19,7 @@
   "activationEvents": [
     "onLanguage:go",
     "onCommand:cadenceLinter.run",
+    "onCommand:cadenceLinter.checkForCliUpdate",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
@@ -27,6 +28,11 @@
       {
         "command": "cadenceLinter.run",
         "title": "Cadence Workflow Linter: Run"
+      }
+      ,
+      {
+        "command": "cadenceLinter.checkForCliUpdate",
+        "title": "Cadence Workflow Linter: Check for CLI update"
       }
     ],
     "configuration": {
