@@ -1,6 +1,6 @@
 module github.com/afony10/cadence-workflow-linter
 
-go 1.25.1
+go 1.25
 
 require (
 	golang.org/x/tools v0.38.0
