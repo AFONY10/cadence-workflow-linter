@@ -1,4 +1,7 @@
 # Note: To be updated
+For extension download and usage, have a read in:
+./vscode-extension/README.md 
+---
 Cadence Workflow Linter — Monorepo
 
 This repository contains a Cadence workflow linter. It has been refactored to
