@@ -77,6 +77,88 @@ export async function runLinter(targetUri?: vscode.Uri) {
   });
 }
 
+export async function exportSarif(targetUri?: vscode.Uri, outFile?: string) {
+  const cfg = vscode.workspace.getConfiguration('cadenceLinter');
+  const extraArgs = cfg.get<string[]>('args', []);
+
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders || workspaceFolders.length === 0) {
+    vscode.window.showWarningMessage('No workspace folder open');
+    return;
+  }
+  const cwd = workspaceFolders[0].uri.fsPath;
+
+  const args = ['--format', 'sarif'].concat(extraArgs);
+  const cliPath = await resolveCliPath(cfg, cwd);
+  const rulesPath = resolveRulesPath(cwd);
+  args.push('--rules', rulesPath);
+  if (targetUri) args.push(targetUri.fsPath); else args.push(cwd);
+
+  try { outputChannel.appendLine(`Running: ${cliPath} ${args.map(a => a.includes(' ') ? '"' + a + '"' : a).join(' ')}`); } catch (e) {}
+
+  return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Exporting SARIF', cancellable: false }, async (progress) => {
+    progress.report({ message: 'Running linter (SARIF)...' });
+
+    return new Promise<void>(async (resolve) => {
+      const spawnAndCollect = (bin: string, a: string[]) => {
+        return new Promise<{stdout: string, stderr: string, code: number|null, err?: any}>((res) => {
+          const c = spawn(bin, a, { cwd });
+          let _stdout = '';
+          let _stderr = '';
+          c.stdout?.on('data', (chunk) => { const s = chunk.toString(); _stdout += s; try { outputChannel.append(s); } catch (e) {} });
+          c.stderr?.on('data', (chunk) => { const s = chunk.toString(); _stderr += s; try { outputChannel.append(s); } catch (e) {} });
+          c.on('error', (err) => { res({ stdout: _stdout, stderr: _stderr, code: null, err }); });
+          c.on('close', (code) => { res({ stdout: _stdout, stderr: _stderr, code }); });
+        });
+      };
+
+      let result = await spawnAndCollect(cliPath, args);
+      if (result.err && (result.err as any).code === 'ENOENT') {
+        try { outputChannel.appendLine(`Configured CLI not found: ${cliPath} — attempting 'go run ./cmd/cadence-linter' fallback`); } catch (e) {}
+        const goArgs = ['run', './cmd/cadence-linter', '--format', 'sarif', '--rules', rulesPath].concat(extraArgs);
+        if (targetUri) goArgs.push(targetUri.fsPath); else goArgs.push(cwd);
+        result = await spawnAndCollect('go', goArgs);
+      }
+
+      if (result.err && (result.err as any).code !== 'ENOENT') {
+        const msg = result.stderr || (result.err && (result.err as any).message) || String(result.err);
+        vscode.window.showErrorMessage('cadence-workflow-linter failed: ' + msg);
+        try { outputChannel.appendLine('Error: ' + msg); } catch (e) {}
+        resolve();
+        return;
+      }
+
+      if (result.code !== 0) {
+        try { outputChannel.appendLine(`cadence-workflow-linter exited with code ${result.code}`); } catch (e) {}
+      }
+
+      // write SARIF to file if requested
+      const sarif = result.stdout || '';
+      if (!sarif) {
+        vscode.window.showErrorMessage('No SARIF output produced by the linter');
+        resolve();
+        return;
+      }
+
+      try {
+        const dest = outFile || await (async () => {
+          const uri = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(path.join(cwd, 'cadence-workflow-linter.sarif')), filters: { 'SARIF files': ['sarif','json'] } });
+          return uri ? uri.fsPath : '';
+        })();
+        if (!dest) { vscode.window.showInformationMessage('SARIF export cancelled'); resolve(); return; }
+        fs.writeFileSync(dest, sarif, 'utf8');
+        vscode.window.showInformationMessage('SARIF exported: ' + dest);
+        try { outputChannel.appendLine('Wrote SARIF to ' + dest); } catch (e) {}
+      } catch (e) {
+        const msg = String(e);
+        vscode.window.showErrorMessage('Failed to write SARIF: ' + msg);
+        try { outputChannel.appendLine('Failed to write SARIF: ' + msg); } catch (e) {}
+      }
+      resolve();
+    });
+  });
+}
+
 export function publishDiagnostics(issues: CliIssue[]) {
   try { diagnosticCollection.clear(); } catch (e) {}
   const workspaceFolders = vscode.workspace.workspaceFolders;

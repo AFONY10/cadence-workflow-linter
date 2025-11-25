@@ -32,6 +32,7 @@
   - Commands (Command Palette):
     - "Cadence Workflow Linter: Run" — run the linter immediately
     - "Cadence Workflow Linter: Check for CLI update" — fetch the release manifest and attempt to download the platform-specific CLI
+      - "Cadence Workflow Linter: Export SARIF" — run the linter and save results in SARIF format (for CI/Code Scanning)
 
 
 ## Annotated screenshots (on how to get the extenstion)

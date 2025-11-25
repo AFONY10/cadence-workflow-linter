@@ -20,6 +20,7 @@
     "onLanguage:go",
     "onCommand:cadenceLinter.run",
     "onCommand:cadenceLinter.checkForCliUpdate",
+    "onCommand:cadenceLinter.exportSarif",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
@@ -33,6 +34,11 @@
       {
         "command": "cadenceLinter.checkForCliUpdate",
         "title": "Cadence Workflow Linter: Check for CLI update"
+      }
+      ,
+      {
+        "command": "cadenceLinter.exportSarif",
+        "title": "Cadence Workflow Linter: Export SARIF"
       }
     ],
     "configuration": {

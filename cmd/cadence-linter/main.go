@@ -19,7 +19,7 @@ func main() {
 	var format string
 	var rulesPath string
 	var enableMapIteration bool
-	flag.StringVar(&format, "format", "json", "output format: json|yaml")
+	flag.StringVar(&format, "format", "json", "output format: json|yaml|sarif")
 	flag.StringVar(&rulesPath, "rules", "config/rules.yaml", "path to rules yaml")
 	flag.BoolVar(&enableMapIteration, "map-iteration", true, "enable detection of nondeterministic map iteration")
 	flag.Parse()
@@ -75,6 +75,13 @@ func main() {
 	switch format {
 	case "yaml", "yml":
 		out, mErr := core.EmitYAML(issues)
+		if mErr != nil {
+			fmt.Println("Marshal error:", mErr)
+			os.Exit(1)
+		}
+		fmt.Print(string(out))
+	case "sarif":
+		out, mErr := core.EmitSARIF(issues)
 		if mErr != nil {
 			fmt.Println("Marshal error:", mErr)
 			os.Exit(1)

@@ -14,6 +14,16 @@ export function activate(context: vscode.ExtensionContext) {
   const runCmd = vscode.commands.registerCommand('cadenceLinter.run', () => runLinter());
   context.subscriptions.push(runCmd);
 
+  const exportSarifCmd = vscode.commands.registerCommand('cadenceLinter.exportSarif', async () => {
+    // prompt for optional save location and run export
+    try {
+      await (require('./diagnostics') as any).exportSarif();
+    } catch (e) {
+      vscode.window.showErrorMessage('Failed to export SARIF: ' + String(e));
+    }
+  });
+  context.subscriptions.push(exportSarifCmd);
+
   // command: check for CLI updates and download if newer (uses cli helpers)
   const checkCmd = vscode.commands.registerCommand('cadenceLinter.checkForCliUpdate', async () => {
     if (!extContext) { vscode.window.showErrorMessage('Extension context not available'); return; }
