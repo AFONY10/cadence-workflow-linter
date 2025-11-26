@@ -38,17 +38,17 @@
 ## Annotated screenshots (on how to get the extenstion)
 
 ### 1) Open the Release
-![Get VSIX Step 1](./docs/images/image.png)
+![Get VSIX Step 1](../Documentation/vscode-extension/images/image.png)
 - Open the GitHub repository Releases page and click the latest release you want to test.
 
 ### 2) Download the VSIX from Assets
-![Get VSIX Step 2](./docs/images/image-1.png)
+![Get VSIX Step 2](../Documentation/vscode-extension/images/image-1.png)
 - In the Release's Assets section, download the `.vsix` file (the packaged extension) to your machine.
 
 ### 3) Install from VSIX in VS Code
-![Get VSIX Step 3](./docs/images/image-2.png)
+![Get VSIX Step 3](../Documentation/vscode-extension/images/image-2.png)
 - In VS Code Extensions view, select the menu (⋯) and choose "Install from VSIX...", then pick the downloaded file.
 
 ### 4) Reload & verify
-![Get VSIX Step 4](./docs/images/image-3.png)
+![Get VSIX Step 4](../Documentation/vscode-extension/images/image-3.png)
 - After installation, reload the window if prompted. Open the Output panel and select "Cadence Workflow Linter" to see activation logs.
