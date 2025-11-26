@@ -72,6 +72,15 @@ Annotated steps (screenshots)
 4) Reload & verify
 ![](Documentation/vscode-extension/images/image-3.png)
 
+Alternative option:
+You can produce and build a .vsix file locally by running this:
+
+  ```powershell
+  cd vscode-extension
+  npx vsce package --no-dependencies
+  # produces a cadence-workflow-linter-vscode-<version>.vsix file
+  ```
+
 Repository layout (important folders)
 ----------
 - `cmd/` — CLI entrypoint (`cmd/cadence-linter`).
