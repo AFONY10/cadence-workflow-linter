@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simple, filter-free icon to avoid converter stripping issues -->
+  <rect x="4" y="4" width="120" height="120" rx="18" fill="#16324A" />
+
+  <!-- workflow lines -->
+  <g stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M36 42 C56 30, 72 30, 92 42" />
+    <path d="M36 86 C56 98, 72 98, 92 86" />
+    <path d="M64 48 L64 80" />
+  </g>
+
+  <!-- nodes -->
+  <g fill="#FFFFFF" stroke="none">
+    <circle cx="36" cy="42" r="6" />
+    <circle cx="64" cy="48" r="6" />
+    <circle cx="92" cy="42" r="6" />
+    <circle cx="36" cy="86" r="6" />
+    <circle cx="64" cy="80" r="6" />
+    <circle cx="92" cy="86" r="6" />
+  </g>
+
+  <!-- magnifier (solid shapes only) -->
+  <g transform="translate(68,68)">
+    <!-- outer rim (orange) -->
+    <circle cx="12" cy="12" r="12" fill="#FF8C42" />
+    <!-- inner hole (white) -->
+    <circle cx="12" cy="12" r="7" fill="#FFFFFF" />
+    <!-- handle -->
+    <rect x="22" y="22" width="18" height="5" rx="2" transform="rotate(45 22 22)" fill="#FF8C42" />
+  </g>
+</svg>

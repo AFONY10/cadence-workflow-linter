@@ -59,3 +59,21 @@ flowchart TD
     C1 -->|clicks file or line| A
     C2 -->|open issue in editor| A
 ```
+```mermaid
+flowchart LR
+    A["Workflow Client(Start Workflow)"] --> B["Cadence Service: Event History Storage"]
+
+    B --> C["Workflow Task Scheduled"]
+    C --> D["Workflow Worker (Deterministic Code)"]
+    D --> E["Decisions (Schedule Activity, Timer, Child Workflow)"]
+
+    E --> B
+
+    E --> F["Activity Task Scheduled"]
+    F --> G["Activity Worker (Side Effects)"]
+    G --> H["Activity Result Returned"]
+    H --> B
+
+    B -.-> I["Replay Workflow Execution"]
+    I --> D
+```
