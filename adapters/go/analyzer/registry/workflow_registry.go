@@ -39,20 +39,19 @@ func (wr *WorkflowRegistry) IsWorkflowReachable(canonicalFuncName string) bool {
 }
 
 func (wr *WorkflowRegistry) isReachableFrom(target string, sources map[string]bool, visited map[string]bool) bool {
-	if visited[target] {
-		return false
-	}
-	visited[target] = true
+	// Traverse outward from the current set of source nodes (workflows or
+	// previously discovered callees). Mark each source as visited to avoid
+	// revisiting nodes. If any callee matches the target, return true.
+	nextLevel := make(map[string]bool)
 	for source := range sources {
+		if visited[source] {
+			continue
+		}
+		visited[source] = true
 		for _, callee := range wr.CallGraph[source] {
 			if callee == target {
 				return true
 			}
-		}
-	}
-	nextLevel := make(map[string]bool)
-	for source := range sources {
-		for _, callee := range wr.CallGraph[source] {
 			nextLevel[callee] = true
 		}
 	}

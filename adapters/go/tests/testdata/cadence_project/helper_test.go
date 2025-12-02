@@ -6,8 +6,12 @@ import (
 	"go.uber.org/cadence/workflow"
 )
 
-func Helper2() time.Time {
+func Helper1() time.Time {
 	return time.Now() // should now be flagged
+}
+
+func Helper2() time.Time {
+	return Helper1() // should be flagged as well
 }
 
 func MyWorkflow(ctx workflow.Context) {

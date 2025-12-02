@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/afony10/cadence-workflow-linter/adapters/go/tests/testdata"
 	"go.uber.org/cadence"
 	"go.uber.org/cadence/activity"
 	"go.uber.org/cadence/worker"
@@ -18,9 +19,9 @@ const (
 	WorkflowName = "OrderProcessingWorkflow"
 )
 
-/* func helper() {
-time.Now() // should be flagged
-} */
+func helper() {
+	time.Now() // should be flagged
+}
 
 func DeliveryActivity(ctx context.Context, order Order) error {
 	// Activities are fine to do this
@@ -71,7 +72,7 @@ func PackageProcessingWorkflow(ctx workflow.Context, order Order) (string, error
 	locations := []string{order.SendFrom}
 	packageDelivered := false
 
-	now := Helper2() // should be flagged
+	now := testdata.Helper2() // should be flagged (longer call chain)
 	fmt.Println("Delivery started at", now)
 	r := rand.Intn(100)
 	fmt.Println("Random number for simulating delivery time:", r)
@@ -169,6 +170,15 @@ func shipProduct(ctx context.Context, order Order) (string, error) {
 	}
 
 	return "shipping successful", nil
+}
+
+// helperLayer1 -> helperLayer2 -> time.Now (long call chain entirely in this package)
+func helperLayer1() time.Time {
+	return helperLayer2()
+}
+
+func helperLayer2() time.Time {
+	return time.Now()
 }
 
 func TestFileBuild(t *testing.T) {
