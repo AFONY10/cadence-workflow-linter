@@ -6,7 +6,7 @@ Cadence Workflow Linter is a productivity extension for developers building Cade
 
 This extension integrates the existing `cadence-workflow-linter` analyzer and surfaces its findings as editor diagnostics, inline hovers and entries in the Problems panel so you can navigate and remediate issues quickly.
 
-![Inline diagnostics preview](./images/inline-diagnostics.png)
+![](./images/inline-diagnostics.png)
 
 ## Key Benefits
 
