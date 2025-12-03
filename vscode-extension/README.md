@@ -6,7 +6,7 @@ Cadence Workflow Linter is a productivity extension for developers building Cade
 
 This extension integrates the existing `cadence-workflow-linter` analyzer and surfaces its findings as editor diagnostics, inline hovers and entries in the Problems panel so you can navigate and remediate issues quickly.
 
-![](./images/inline-diagnostics.png)
+![](https://raw.githubusercontent.com/AFONY10/cadence-workflow-linter/main/vscode-extension/images/inline-diagnostics.png)
 
 ## Key Benefits
 
@@ -44,3 +44,6 @@ Open Settings (File → Preferences → Settings) and search for `cadenceLinter`
 ## Support
 
 If you find a bug or need help, open an issue on the repository and include the CLI output from the extension output channel.
+
+---
+_Created by Anthony Nguyen (anthonyking10a@gmail.com)_
