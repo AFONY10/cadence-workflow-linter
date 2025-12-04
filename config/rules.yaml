@@ -3,25 +3,25 @@ function_calls:
     package: time
     functions: [Now, Since, Sleep]
     severity: error
-    message: "Detected time.%FUNC%() in workflow. Use workflow.Now(ctx)/workflow.Sleep(ctx) instead."
+    message: "Detected %FUNC%() in workflow. Use workflow.Now(ctx)/workflow.Sleep(ctx) instead."
 
   - rule: Randomness
     package: math/rand
     functions: [Intn, Int, Float32, Float64, Read]
     severity: error
-    message: "Detected rand.%FUNC%() in workflow. Avoid nondeterminism; use workflow.SideEffect if needed."
+    message: "Detected %FUNC%() in workflow. Avoid nondeterminism; use workflow.SideEffect if needed."
 
   - rule: IOCalls
     package: os
     functions: [Open, OpenFile, ReadFile, WriteFile, Mkdir, Remove]
     severity: error
-    message: "Detected os.%FUNC%() in workflow. Avoid file I/O inside workflows."
+    message: "Detected %FUNC%() in workflow. Avoid file I/O inside workflows."
 
   - rule: IOCalls
     package: fmt
     functions: [Println, Printf, Print]
     severity: warning
-    message: "Detected fmt.%FUNC%() in workflow. Use workflow.GetLogger(ctx) instead."
+    message: "Detected %FUNC%() in workflow. Use workflow.GetLogger(ctx) instead."
 
 network_calls:
   - rule: Network
