@@ -42,10 +42,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Compile language mappings for Go and Java (if present). These are used by
+	// adapters to prefer centralized patterns over heuristics.
+	goMappings, _ := rules.CompileLanguageMappings("go")
+	javaMappings, _ := rules.CompileLanguageMappings("java")
+
 	// Factory returns fresh visitors per file using config and module info
 	factory := func(moduleInfo *modutils.ModuleInfo) []ast.Visitor {
+		// create func call detector and set compiled go mappings
+		fc := detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, moduleInfo)
+		if len(goMappings) > 0 {
+			fc.SetLanguageMappings(goMappings)
+		}
+
 		visitors := []ast.Visitor{
-			detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, moduleInfo),
+			fc,
 			detectors.NewImportDetector(rules.DisallowedImports),
 			detectors.NewGoroutineDetector(),
 			detectors.NewChannelDetector(),
@@ -118,10 +129,14 @@ func main() {
 			}
 		}
 	case "java":
+		// provide precompiled java mappings to the java analyzer for efficiency
+		if len(javaMappings) > 0 {
+			javaanalyzer.SetLanguageMappings(javaMappings)
+		}
 		if info.IsDir() {
-			issues, err = javaanalyzer.ScanDirectory(target)
+			issues, err = javaanalyzer.ScanDirectory(target, rules)
 		} else {
-			issues, err = javaanalyzer.ScanFile(target)
+			issues, err = javaanalyzer.ScanFile(target, rules)
 		}
 	default:
 		fmt.Println("Unsupported language:", detectedLang)

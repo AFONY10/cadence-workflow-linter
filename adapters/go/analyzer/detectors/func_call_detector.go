@@ -3,6 +3,7 @@ package detectors
 import (
 	"fmt"
 	"go/ast"
+	"regexp"
 	"strings"
 
 	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer/modutils"
@@ -22,6 +23,11 @@ type FuncCallDetector struct {
 	issues           []Issue
 	functionSet      map[string]map[string]config.FunctionRule        // importPath -> funcName -> rule
 	externalFuncSet  map[string]map[string]config.ExternalPackageRule // external importPath -> funcName -> rule
+	// compiled language mappings (ruleID -> regexps)
+	languageMappings map[string][]*regexp.Regexp
+	// rule lookup by ID
+	ruleByID    map[string]config.FunctionRule
+	extRuleByID map[string]config.ExternalPackageRule
 }
 
 func NewFuncCallDetector(rules []config.FunctionRule, externalRules []config.ExternalPackageRule, safeExternalPkgs []string, moduleInfo *modutils.ModuleInfo) *FuncCallDetector {
@@ -49,6 +55,16 @@ func NewFuncCallDetector(rules []config.FunctionRule, externalRules []config.Ext
 		}
 	}
 
+	// build rule id maps
+	ruleByID := make(map[string]config.FunctionRule)
+	for _, r := range rules {
+		ruleByID[r.Rule] = r
+	}
+	extRuleByID := make(map[string]config.ExternalPackageRule)
+	for _, r := range externalRules {
+		extRuleByID[r.Rule] = r
+	}
+
 	return &FuncCallDetector{
 		rules:            rules,
 		externalRules:    externalRules,
@@ -57,7 +73,15 @@ func NewFuncCallDetector(rules []config.FunctionRule, externalRules []config.Ext
 		issues:           []Issue{},
 		functionSet:      fnSet,
 		externalFuncSet:  extFnSet,
+		languageMappings: nil,
+		ruleByID:         ruleByID,
+		extRuleByID:      extRuleByID,
 	}
+}
+
+// SetLanguageMappings supplies compiled regex mappings for a language (e.g. "go").
+func (d *FuncCallDetector) SetLanguageMappings(m map[string][]*regexp.Regexp) {
+	d.languageMappings = m
 }
 
 func (d *FuncCallDetector) SetWorkflowRegistry(reg *registry.WorkflowRegistry) { d.wr = reg }
@@ -89,10 +113,31 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 		}
 		funcName := n.Sel.Name
 
-		// Check regular function call rules first
+		// Try language mappings first (if supplied)
+		qualified := importPath + "." + funcName
+		if d.languageMappings != nil {
+			for ruleID, regs := range d.languageMappings {
+				for _, re := range regs {
+					if re.MatchString(qualified) {
+						// find a matching rule definition to get severity/message
+						if r, ok := d.ruleByID[ruleID]; ok {
+							d.createIssueIfInWorkflow(n, r.Rule, r.Severity, strings.ReplaceAll(r.Message, "%FUNC%", funcName), qualified)
+						} else if er, ok := d.extRuleByID[ruleID]; ok {
+							d.createIssueIfInWorkflow(n, er.Rule, er.Severity, strings.ReplaceAll(er.Message, "%FUNC%", funcName), qualified)
+						} else {
+							// fallback: emit with ruleID as-is
+							d.createIssueIfInWorkflow(n, ruleID, "error", strings.ReplaceAll("Detected %FUNC%() in workflow.", "%FUNC%", funcName), qualified)
+						}
+						return d
+					}
+				}
+			}
+		}
+
+		// Check regular function call rules next
 		if ruleMap, ok := d.functionSet[importPath]; ok {
 			if rule, ok := ruleMap[funcName]; ok {
-				d.createIssueIfInWorkflow(n, rule.Rule, rule.Severity, strings.ReplaceAll(rule.Message, "%FUNC%", funcName), funcName)
+				d.createIssueIfInWorkflow(n, rule.Rule, rule.Severity, strings.ReplaceAll(rule.Message, "%FUNC%", funcName), qualified)
 				return d
 			}
 		}
@@ -100,7 +145,7 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 		// Check external package rules
 		if extRuleMap, ok := d.externalFuncSet[importPath]; ok {
 			if extRule, ok := extRuleMap[funcName]; ok {
-				d.createIssueIfInWorkflow(n, extRule.Rule, extRule.Severity, strings.ReplaceAll(extRule.Message, "%FUNC%", funcName), funcName)
+				d.createIssueIfInWorkflow(n, extRule.Rule, extRule.Severity, strings.ReplaceAll(extRule.Message, "%FUNC%", funcName), qualified)
 				return d
 			}
 		}
@@ -122,7 +167,7 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 					Severity: "info",
 					Message:  fmt.Sprintf("Call to unknown external package %s.%s() - please verify it's workflow-safe", importPath, funcName),
 					Func:     d.currFunc,
-					Callee:   funcName,
+					Callee:   qualified,
 				})
 			}
 		}
