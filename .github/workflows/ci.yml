@@ -31,11 +31,55 @@ jobs:
       - name: Run go tests
         run: go test ./...
 
+      - name: Run go tests with race detector
+        run: go test -race ./...
+
+      - name: Run go tests with coverage
+        run: go test -coverprofile=coverage.out ./...
+
+      - name: Display coverage summary
+        run: go tool cover -func=coverage.out | tail -n 1
+
       - name: Run go vet
         run: go vet ./...
 
-      - name: Build VS Code extension TypeScript (optional)
+      - name: Check go formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Build CLI binary
+        run: go build -o cadence-linter ./cmd/cadence-linter
+
+      - name: Test CLI help
+        run: ./cadence-linter --help || true
+
+      - name: Run integration tests
+        run: go test -v ./tests/integration
+
+      - name: Build VS Code extension TypeScript
         working-directory: vscode-extension
         run: |
           npm ci
           npm run compile
+
+      - name: Validate VS Code extension package
+        working-directory: vscode-extension
+        run: |
+          # Check package.json has required fields
+          if ! jq -e '.name and .version and .publisher and .engines.vscode' package.json > /dev/null; then
+            echo "package.json missing required fields"
+            exit 1
+          fi
+          echo "Extension package.json is valid"
+
+      - name: Test VSIX packaging (dry-run)
+        working-directory: vscode-extension
+        run: |
+          npm install -g vsce
+          vsce package --no-dependencies
+          ls -lh *.vsix

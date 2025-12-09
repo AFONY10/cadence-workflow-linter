@@ -1,0 +1,274 @@
+name: Test Release Build
+
+on:
+  pull_request:
+    branches: [ main, feature/* ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-build-cli:
+    name: Test Build CLI (matrix)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            arch: amd64
+            out: cadence-linter-linux-amd64
+          - goos: linux
+            arch: arm64
+            out: cadence-linter-linux-arm64
+          - goos: darwin
+            arch: amd64
+            out: cadence-linter-darwin-amd64
+          - goos: darwin
+            arch: arm64
+            out: cadence-linter-darwin-arm64
+          - goos: windows
+            arch: amd64
+            out: cadence-linter-windows-amd64.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p dist
+          echo "Building for $GOOS/$GOARCH -> dist/${{ matrix.out }}"
+          CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags='-s -w' -o "dist/${{ matrix.out }}" ./cmd/cadence-linter
+
+      - name: Verify binary created
+        run: |
+          if [ ! -f "dist/${{ matrix.out }}" ]; then
+            echo "Binary not found: dist/${{ matrix.out }}"
+            exit 1
+          fi
+          ls -lh dist/${{ matrix.out }}
+
+      - name: Create and verify checksum
+        run: |
+          cd dist
+          sha256sum "${{ matrix.out }}" | tee "${{ matrix.out }}.sha256"
+          # Verify checksum file is not empty
+          if [ ! -s "${{ matrix.out }}.sha256" ]; then
+            echo "Checksum file is empty"
+            exit 1
+          fi
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-cli-artifacts-${{ matrix.goos }}-${{ matrix.arch }}
+          path: |
+            dist/${{ matrix.out }}
+            dist/${{ matrix.out }}.sha256
+          retention-days: 7
+
+  test-package-vsix:
+    name: Test VSIX Packaging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.18.1'
+
+      - name: Install npm deps
+        working-directory: vscode-extension
+        run: npm ci || npm install --no-audit --no-fund
+
+      - name: Compile extension
+        working-directory: vscode-extension
+        run: npm run compile
+
+      - name: Verify compiled output exists
+        working-directory: vscode-extension
+        run: |
+          if [ ! -d "out" ]; then
+            echo "Compiled output directory 'out' not found"
+            exit 1
+          fi
+          if [ ! -f "out/extension.js" ]; then
+            echo "Main extension file out/extension.js not found"
+            exit 1
+          fi
+          echo "Extension compiled successfully"
+
+      - name: Package VSIX
+        working-directory: vscode-extension
+        run: npx vsce package --no-dependencies
+
+      - name: Verify VSIX created
+        working-directory: vscode-extension
+        run: |
+          vsix_file=$(ls *.vsix 2>/dev/null || echo "")
+          if [ -z "$vsix_file" ]; then
+            echo "VSIX file not created"
+            exit 1
+          fi
+          echo "VSIX created: $vsix_file"
+          ls -lh *.vsix
+
+      - name: Validate VSIX structure
+        working-directory: vscode-extension
+        run: |
+          vsix_file=$(ls *.vsix)
+          # Extract VSIX (it's a zip file)
+          unzip -q "$vsix_file" -d vsix-contents
+          
+          # Check for required files
+          required_files=(
+            "extension.vsixmanifest"
+            "extension/package.json"
+            "extension/out/extension.js"
+          )
+          
+          for file in "${required_files[@]}"; do
+            if [ ! -f "vsix-contents/$file" ]; then
+              echo "Required file missing in VSIX: $file"
+              exit 1
+            fi
+          done
+          
+          echo "VSIX structure validated successfully"
+
+      - name: Check VSIX package.json
+        working-directory: vscode-extension
+        run: |
+          vsix_file=$(ls *.vsix)
+          unzip -q "$vsix_file" -d vsix-contents
+          
+          # Validate package.json fields
+          cd vsix-contents/extension
+          if ! jq -e '.name and .version and .publisher and .engines.vscode and .main' package.json > /dev/null; then
+            echo "VSIX package.json missing required fields"
+            jq '.' package.json
+            exit 1
+          fi
+          
+          echo "VSIX package.json is valid"
+          jq '{name, version, publisher, engines}' package.json
+
+      - name: Upload test VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-vsix-artifact
+          path: vscode-extension/*.vsix
+          retention-days: 7
+
+  test-manifest-creation:
+    name: Test Manifest Generation
+    runs-on: ubuntu-latest
+    needs: [test-build-cli]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Move artifacts to dist
+        run: |
+          mkdir -p dist
+          find artifacts -type f -name 'cadence-linter-*' -exec cp {} dist/ \;
+          ls -lh dist/
+
+      - name: Create test manifest.json
+        run: |
+          TAG="v0.0.0-test"
+          echo "Creating manifest for test tag $TAG"
+          cd dist
+          
+          # Build manifest JSON
+          echo -n "{" > ../manifest.json
+          echo -n "\"tag\":\"$TAG\"," >> ../manifest.json
+          echo -n "\"artifacts\":{" >> ../manifest.json
+          first=1
+          for f in *; do
+            case "$f" in
+              *.sha256) continue ;;
+            esac
+            shafile="$f.sha256"
+            if [ -f "$shafile" ]; then
+              sha=$(cat "$shafile" | awk '{print $1}')
+            else
+              sha=$(sha256sum "$f" | awk '{print $1}')
+            fi
+            if [ $first -eq 1 ]; then
+              first=0
+            else
+              echo -n "," >> ../manifest.json
+            fi
+            esc=$(printf '%s' "$f" | sed 's/"/\\\"/g')
+            echo -n "\"$esc\":\"$sha\"" >> ../manifest.json
+          done
+          echo -n "}}" >> ../manifest.json
+          
+          echo "Manifest created:"
+          cat ../manifest.json | jq '.'
+
+      - name: Validate manifest structure
+        run: |
+          # Verify it's valid JSON
+          if ! jq empty manifest.json 2>/dev/null; then
+            echo "manifest.json is not valid JSON"
+            exit 1
+          fi
+          
+          # Check required fields
+          if ! jq -e '.tag and .artifacts' manifest.json > /dev/null; then
+            echo "manifest.json missing required fields"
+            exit 1
+          fi
+          
+          # Check artifacts count
+          artifact_count=$(jq '.artifacts | length' manifest.json)
+          if [ "$artifact_count" -lt 3 ]; then
+            echo "Expected at least 3 artifacts in manifest, found $artifact_count"
+            exit 1
+          fi
+          
+          echo "Manifest validation passed"
+          echo "Artifacts in manifest: $artifact_count"
+
+      - name: Upload test manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-manifest
+          path: manifest.json
+          retention-days: 7
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-build-cli, test-package-vsix, test-manifest-creation]
+    steps:
+      - name: Summary
+        run: |
+          echo "✅ All release build tests passed!"
+          echo ""
+          echo "Validated:"
+          echo "  - CLI builds for all platforms"
+          echo "  - VSIX packaging"
+          echo "  - VSIX structure and manifest"
+          echo "  - Release manifest generation"
+          echo ""
+          echo "Ready for release when tagged!"
