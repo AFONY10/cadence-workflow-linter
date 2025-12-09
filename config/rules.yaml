@@ -65,6 +65,11 @@ rules:
             types: [FileInputStream, FileOutputStream]
             methods: [read, write]
             severity: error
+          - package: java.io
+            types: [PrintStream]
+            methods: [println, print, printf]
+            severity: warning
+            message: "Detected %FUNC%() in workflow. Use Workflow.getLogger() instead."
 
   Network:
     description: "Network calls must be performed via activities."

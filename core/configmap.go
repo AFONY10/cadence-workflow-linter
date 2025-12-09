@@ -33,10 +33,11 @@ func ApplyConfigOverrides(issues []Issue, rs *config.RuleSet) []Issue {
 	out := make([]Issue, 0, len(issues))
 	for _, iss := range issues {
 		if ov, ok := overrides[iss.Rule]; ok {
-			if ov.severity != "" {
+			// Only apply defaults when the detector did not already set a value.
+			if iss.Severity == "" && ov.severity != "" {
 				iss.Severity = ov.severity
 			}
-			if ov.message != "" {
+			if iss.Message == "" && ov.message != "" {
 				// Prefer explicit Callee when provided by detectors, fall back to the
 				// canonical Func name otherwise. This allows detectors to supply the
 				// precise API function name for message substitution.
