@@ -64,13 +64,16 @@ jobs:
       - name: Build VS Code extension TypeScript
         working-directory: vscode-extension
         run: |
-          npm ci
+          npm install --no-audit --no-fund
           npm run compile
 
       - name: Validate VS Code extension package
         working-directory: vscode-extension
         run: |
           # Check package.json has required fields
+          if ! command -v jq &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
           if ! jq -e '.name and .version and .publisher and .engines.vscode' package.json > /dev/null; then
             echo "package.json missing required fields"
             exit 1
