@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -26,7 +25,7 @@ func main() {
 	flag.StringVar(&format, "format", "json", "output format: json|yaml|sarif")
 	flag.StringVar(&rulesPath, "rules", "config/rules.yaml", "path to rules yaml")
 	flag.BoolVar(&enableMapIteration, "map-iteration", true, "enable detection of nondeterministic map iteration")
-	flag.StringVar(&lang, "lang", "auto", "language to scan: auto|go|java")
+	flag.StringVar(&lang, "lang", "auto", "language to scan: auto|go|java|all")
 	flag.Parse()
 
 	if flag.NArg() < 1 {
@@ -77,30 +76,12 @@ func main() {
 	// Determine language to use
 	detectedLang := lang
 	if detectedLang == "auto" {
-		if !info.IsDir() {
-			if filepath.Ext(target) == ".java" {
-				detectedLang = "java"
-			} else {
-				detectedLang = "go"
-			}
+		// For directories: scan ALL languages (multi-language support)
+		if info.IsDir() {
+			detectedLang = "all"
 		} else {
-			// look for any .java files under the directory as a heuristic
-			found := false
-			stopErr := errors.New("_found_java_")
-			_ = filepath.Walk(target, func(path string, fi os.FileInfo, werr error) error {
-				if werr != nil {
-					return werr
-				}
-				if fi == nil || fi.IsDir() {
-					return nil
-				}
-				if filepath.Ext(path) == ".java" {
-					found = true
-					return stopErr
-				}
-				return nil
-			})
-			if found {
+			// For single files: detect by extension
+			if filepath.Ext(target) == ".java" {
 				detectedLang = "java"
 			} else {
 				detectedLang = "go"
@@ -137,6 +118,29 @@ func main() {
 			issues, err = javaanalyzer.ScanDirectory(target, rules)
 		} else {
 			issues, err = javaanalyzer.ScanFile(target, rules)
+		}
+	case "all":
+		// Scan all supported languages in the directory
+		if len(javaMappings) > 0 {
+			javaanalyzer.SetLanguageMappings(javaMappings)
+		}
+
+		// Scan Go code
+		goIssues, goErr := analyzer.ScanDirectory(target, factory)
+		if goErr != nil {
+			fmt.Println("Go scan error:", goErr)
+		} else {
+			for _, it := range goIssues {
+				issues = append(issues, it)
+			}
+		}
+
+		// Scan Java code
+		javaIssues, javaErr := javaanalyzer.ScanDirectory(target, rules)
+		if javaErr != nil {
+			fmt.Println("Java scan error:", javaErr)
+		} else {
+			issues = append(issues, javaIssues...)
 		}
 	default:
 		fmt.Println("Unsupported language:", detectedLang)
