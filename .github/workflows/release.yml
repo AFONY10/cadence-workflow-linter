@@ -90,25 +90,6 @@ jobs:
         # `npm ci` requires a package-lock.json; fall back to `npm install` if absent
         run: npm ci || npm install --no-audit --no-fund
 
-      - name: Set extension version from tag
-        if: startsWith(github.ref, 'refs/tags/')
-        working-directory: .
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          VERSION="${TAG#v}"
-          echo "Setting vscode-extension/package.json version to $VERSION"
-          python - "$VERSION" <<'PY'
-          import json,sys
-          version=sys.argv[1]
-          p='vscode-extension/package.json'
-          with open(p,'r',encoding='utf-8') as f:
-          d=json.load(f)
-          d['version']=version
-          with open(p,'w',encoding='utf-8') as f:
-          json.dump(d,f,indent=2,ensure_ascii=False)
-          print('Updated',p,'to',version)
-          PY
-
       - name: Compile extension
         working-directory: vscode-extension
         run: npm run compile
