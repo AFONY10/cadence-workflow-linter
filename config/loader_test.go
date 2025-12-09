@@ -3,7 +3,6 @@ package config_test
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -17,144 +16,87 @@ func TestLoadRules(t *testing.T) {
 		t.Fatalf("Failed to load rules.yaml: %v", err)
 	}
 
-	// Verify top-level rules exist
-	if len(rules.FunctionCalls) == 0 {
-		t.Errorf("Expected function_calls rules, found none")
-	}
-	if len(rules.ExternalPackages) == 0 {
-		t.Errorf("Expected external_packages rules, found none")
+	// Verify Rules map exists and has rules
+	if len(rules.Rules) == 0 {
+		t.Errorf("Expected rules in Rules map, found none")
 	}
 
 	// Verify essential rules are present
 	requiredRules := []string{"TimeUsage", "Randomness", "IOCalls"}
 	for _, ruleID := range requiredRules {
-		found := false
-		for _, rule := range rules.FunctionCalls {
-			if rule.Rule == ruleID {
-				found = true
-				if rule.Message == "" {
-					t.Errorf("Rule %s has empty message", ruleID)
-				}
-				if rule.Severity == "" {
-					t.Errorf("Rule %s has empty severity", ruleID)
-				}
-				break
+		rule, ok := rules.Rules[ruleID]
+		if !ok {
+			t.Errorf("Required rule %s not found in Rules map", ruleID)
+			continue
+		}
+		if rule.Description == "" {
+			t.Errorf("Rule %s has empty description", ruleID)
+		}
+		if rule.Message == "" {
+			t.Errorf("Rule %s has empty message", ruleID)
+		}
+		if rule.DefaultSeverity == "" {
+			t.Errorf("Rule %s has empty default_severity", ruleID)
+		}
+	}
+}
+
+// TestLanguageSupport verifies that languages are properly structured
+func TestLanguageSupport(t *testing.T) {
+	rules, err := config.LoadRules("rules.yaml")
+	if err != nil {
+		t.Fatalf("Failed to load rules.yaml: %v", err)
+	}
+
+	// Check that at least one rule has Go support
+	hasGo := false
+	hasJava := false
+	for _, rule := range rules.Rules {
+		if rule.Languages != nil {
+			if _, ok := rule.Languages["go"]; ok {
+				hasGo = true
 			}
-		}
-		if !found {
-			t.Errorf("Required rule %s not found in function_calls", ruleID)
-		}
-	}
-}
-
-// TestLanguageMappingsExist verifies that language mappings are present
-func TestLanguageMappingsExist(t *testing.T) {
-	rules, err := config.LoadRules("rules.yaml")
-	if err != nil {
-		t.Fatalf("Failed to load rules.yaml: %v", err)
-	}
-
-	if rules.LanguageMappings == nil || len(rules.LanguageMappings) == 0 {
-		t.Fatalf("Expected language_mappings in rules.yaml, found none")
-	}
-
-	// Check for Go mappings
-	goMappings, ok := rules.LanguageMappings["go"]
-	if !ok || len(goMappings) == 0 {
-		t.Errorf("Expected 'go' language mappings, found none")
-	}
-
-	// Check for Java mappings
-	javaMappings, ok := rules.LanguageMappings["java"]
-	if !ok || len(javaMappings) == 0 {
-		t.Errorf("Expected 'java' language mappings, found none")
-	}
-}
-
-// TestCompileLanguageMappings verifies regex compilation works
-func TestCompileLanguageMappings(t *testing.T) {
-	rules, err := config.LoadRules("rules.yaml")
-	if err != nil {
-		t.Fatalf("Failed to load rules.yaml: %v", err)
-	}
-
-	// Test Go mappings
-	goMappings, err := rules.CompileLanguageMappings("go")
-	if err != nil {
-		t.Fatalf("Failed to compile Go language mappings: %v", err)
-	}
-
-	if len(goMappings) == 0 {
-		t.Errorf("Expected compiled Go mappings, got none")
-	}
-
-	// Verify each mapping compiles to valid regexes
-	for ruleID, patterns := range goMappings {
-		if len(patterns) == 0 {
-			t.Errorf("Rule %s has no compiled patterns", ruleID)
-		}
-		for i, re := range patterns {
-			if re == nil {
-				t.Errorf("Rule %s pattern %d failed to compile", ruleID, i)
+			if _, ok := rule.Languages["java"]; ok {
+				hasJava = true
 			}
 		}
 	}
 
-	// Test Java mappings
-	javaMappings, err := rules.CompileLanguageMappings("java")
-	if err != nil {
-		t.Fatalf("Failed to compile Java language mappings: %v", err)
+	if !hasGo {
+		t.Errorf("Expected at least one rule with Go support")
 	}
-
-	if len(javaMappings) == 0 {
-		t.Errorf("Expected compiled Java mappings, got none")
+	if !hasJava {
+		t.Errorf("Expected at least one rule with Java support")
 	}
 }
 
-// TestCompileLanguageMappingsInvalidLanguage verifies handling of non-existent language
-func TestCompileLanguageMappingsInvalidLanguage(t *testing.T) {
+// TestGetRulesForLanguage verifies language-specific rule extraction
+func TestGetRulesForLanguage(t *testing.T) {
 	rules, err := config.LoadRules("rules.yaml")
 	if err != nil {
 		t.Fatalf("Failed to load rules.yaml: %v", err)
 	}
 
-	// Should return empty map, not error
-	mappings, err := rules.CompileLanguageMappings("nonexistent")
-	if err != nil {
-		t.Errorf("Expected no error for non-existent language, got: %v", err)
-	}
-	if mappings == nil {
-		t.Errorf("Expected empty map, got nil")
-	}
-}
-
-// TestLanguageMappingPatternValidity verifies patterns can match expected strings
-func TestLanguageMappingPatternValidity(t *testing.T) {
-	rules, err := config.LoadRules("rules.yaml")
-	if err != nil {
-		t.Fatalf("Failed to load rules.yaml: %v", err)
+	// Get Go rules
+	goRules := rules.GetRulesForLanguage("go")
+	if len(goRules) == 0 {
+		t.Errorf("Expected Go rules, found none")
 	}
 
-	goMappings, err := rules.CompileLanguageMappings("go")
-	if err != nil {
-		t.Fatalf("Failed to compile Go mappings: %v", err)
+	// Get Java rules
+	javaRules := rules.GetRulesForLanguage("java")
+	if len(javaRules) == 0 {
+		t.Errorf("Expected Java rules, found none")
 	}
 
-	// Test TimeUsage patterns should match "time.Now()"
-	timePatterns, ok := goMappings["TimeUsage"]
-	if !ok || len(timePatterns) == 0 {
-		t.Skip("No TimeUsage Go mappings to test")
-	}
-
-	matched := false
-	for _, re := range timePatterns {
-		if re.MatchString("time.Now()") {
-			matched = true
-			break
+	// Verify structure
+	for ruleID, rule := range goRules {
+		if rule.Languages == nil {
+			t.Errorf("Go rule %s has nil Languages", ruleID)
 		}
-	}
-	if !matched {
-		t.Errorf("Expected TimeUsage patterns to match 'time.Now()', but none did")
+		if _, ok := rule.Languages["go"]; !ok {
+			t.Errorf("Go rule %s missing 'go' language config", ruleID)
+		}
 	}
 }
 
@@ -173,26 +115,19 @@ func TestRulesFileStructure(t *testing.T) {
 		t.Fatalf("Failed to load rules.yaml: %v", err)
 	}
 
-	// Verify each function_calls rule has required fields
-	for i, rule := range rules.FunctionCalls {
-		if rule.Rule == "" {
-			t.Errorf("function_calls[%d] missing 'rule' field", i)
+	// Verify each rule has required fields
+	for ruleID, rule := range rules.Rules {
+		if rule.Description == "" {
+			t.Errorf("Rule %s missing 'description' field", ruleID)
 		}
 		if rule.Message == "" {
-			t.Errorf("function_calls[%d] (%s) missing 'message' field", i, rule.Rule)
+			t.Errorf("Rule %s missing 'message' field", ruleID)
 		}
-		if rule.Severity != "error" && rule.Severity != "warning" && rule.Severity != "info" {
-			t.Errorf("function_calls[%d] (%s) has invalid severity: %s", i, rule.Rule, rule.Severity)
+		if rule.DefaultSeverity != "error" && rule.DefaultSeverity != "warning" && rule.DefaultSeverity != "info" {
+			t.Errorf("Rule %s has invalid default_severity: %s", ruleID, rule.DefaultSeverity)
 		}
-	}
-
-	// Verify external_packages rules
-	for i, rule := range rules.ExternalPackages {
-		if rule.Rule == "" {
-			t.Errorf("external_packages[%d] missing 'rule' field", i)
-		}
-		if rule.Package == "" {
-			t.Errorf("external_packages[%d] (%s) missing 'package' field", i, rule.Rule)
+		if rule.Languages == nil || len(rule.Languages) == 0 {
+			t.Errorf("Rule %s has no language configurations", ruleID)
 		}
 	}
 }
@@ -204,25 +139,28 @@ func TestLanguageMappingsYAMLFormat(t *testing.T) {
 		t.Fatalf("Failed to load rules.yaml: %v", err)
 	}
 
-	if rules.LanguageMappings == nil {
-		t.Skip("No language_mappings in rules.yaml")
+	if rules.Rules == nil {
+		t.Skip("No rules in rules.yaml")
 	}
 
-	for lang, mappings := range rules.LanguageMappings {
-		if len(mappings) == 0 {
-			t.Errorf("Language %s has no mappings", lang)
+	for ruleID, rule := range rules.Rules {
+		if rule.Languages == nil {
+			t.Errorf("Rule %s has no language configurations", ruleID)
+			continue
 		}
-		for ruleID, patterns := range mappings {
-			if len(patterns) == 0 {
-				t.Errorf("Language %s rule %s has no patterns", lang, ruleID)
-			}
-			for i, pattern := range patterns {
-				if pattern == "" {
-					t.Errorf("Language %s rule %s pattern %d is empty", lang, ruleID, i)
+		for lang, langConfig := range rule.Languages {
+			if langConfig.FunctionCalls != nil {
+				for _, fc := range langConfig.FunctionCalls {
+					if len(fc.Functions) == 0 {
+						t.Errorf("Rule %s lang %s function_call has no functions", ruleID, lang)
+					}
 				}
-				// Verify it's a valid regex
-				if _, err := regexp.Compile(pattern); err != nil {
-					t.Errorf("Language %s rule %s pattern %d is invalid regex: %v", lang, ruleID, i, err)
+			}
+			if langConfig.MethodCalls != nil {
+				for _, mc := range langConfig.MethodCalls {
+					if len(mc.Methods) == 0 {
+						t.Errorf("Rule %s lang %s method_call has no methods", ruleID, lang)
+					}
 				}
 			}
 		}
@@ -236,17 +174,18 @@ func TestSafeExternalPackages(t *testing.T) {
 		t.Fatalf("Failed to load rules.yaml: %v", err)
 	}
 
-	if len(rules.SafeExternalPackages) == 0 {
-		t.Logf("Note: No safe_external_packages defined (may be intentional)")
+	goSafeImports := rules.GetSafeImports("go")
+	if len(goSafeImports) == 0 {
+		t.Logf("Note: No safe imports defined for Go (may be intentional)")
 	}
 
-	// Verify safe packages are valid package paths
-	for _, pkg := range rules.SafeExternalPackages {
+	// Verify safe imports are valid package paths
+	for _, pkg := range goSafeImports {
 		if pkg == "" {
-			t.Errorf("Found empty string in safe_external_packages")
+			t.Errorf("Found empty string in safe imports")
 		}
 		if strings.Contains(pkg, " ") {
-			t.Errorf("Safe package should not contain spaces: %s", pkg)
+			t.Errorf("Safe import should not contain spaces: %s", pkg)
 		}
 	}
 }
@@ -271,9 +210,9 @@ func TestMultipleRulesFiles(t *testing.T) {
 	}
 
 	// Should have same number of rules
-	if len(rules1.FunctionCalls) != len(rules2.FunctionCalls) {
-		t.Errorf("Different number of function_calls between loads: %d vs %d",
-			len(rules1.FunctionCalls), len(rules2.FunctionCalls))
+	if len(rules1.Rules) != len(rules2.Rules) {
+		t.Errorf("Different number of rules between loads: %d vs %d",
+			len(rules1.Rules), len(rules2.Rules))
 	}
 }
 
@@ -283,7 +222,7 @@ func TestEmptyRulesFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "empty.yaml")
 
-	if err := os.WriteFile(tmpFile, []byte("{}"), 0644); err != nil {
+	if err := os.WriteFile(tmpFile, []byte("rules: {}"), 0644); err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
 
@@ -292,12 +231,9 @@ func TestEmptyRulesFile(t *testing.T) {
 		t.Fatalf("Failed to load empty rules: %v", err)
 	}
 
-	// Should succeed with zero rules - slices may be nil or empty
-	if rules.FunctionCalls == nil {
-		t.Logf("Note: FunctionCalls is nil (this is acceptable for empty YAML)")
-	}
-	if rules.ExternalPackages == nil {
-		t.Logf("Note: ExternalPackages is nil (this is acceptable for empty YAML)")
+	// Should succeed with zero rules
+	if rules.Rules == nil {
+		t.Logf("Note: Rules is nil (this is acceptable for empty YAML)")
 	}
 }
 

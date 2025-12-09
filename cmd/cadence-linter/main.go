@@ -41,27 +41,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Compile language mappings for Go and Java (if present). These are used by
-	// adapters to prefer centralized patterns over heuristics.
-	goMappings, _ := rules.CompileLanguageMappings("go")
-	javaMappings, _ := rules.CompileLanguageMappings("java")
-
 	// Factory returns fresh visitors per file using config and module info
 	factory := func(moduleInfo *modutils.ModuleInfo) []ast.Visitor {
-		// create func call detector and set compiled go mappings
-		fc := detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, moduleInfo)
-		if len(goMappings) > 0 {
-			fc.SetLanguageMappings(goMappings)
-		}
-
 		visitors := []ast.Visitor{
-			fc,
-			detectors.NewImportDetector(rules.DisallowedImports),
+			detectors.NewFuncCallDetector(rules, moduleInfo),
+			detectors.NewImportDetector(rules),
 			detectors.NewGoroutineDetector(),
 			detectors.NewChannelDetector(),
 		}
 		if enableMapIteration {
-			visitors = append(visitors, detectors.NewMapIterationDetector(rules.FunctionCalls))
+			visitors = append(visitors, detectors.NewMapIterationDetector(rules))
 		}
 		return visitors
 	}
@@ -110,10 +99,6 @@ func main() {
 			}
 		}
 	case "java":
-		// provide precompiled java mappings to the java analyzer for efficiency
-		if len(javaMappings) > 0 {
-			javaanalyzer.SetLanguageMappings(javaMappings)
-		}
 		if info.IsDir() {
 			issues, err = javaanalyzer.ScanDirectory(target, rules)
 		} else {
@@ -121,9 +106,6 @@ func main() {
 		}
 	case "all":
 		// Scan all supported languages in the directory
-		if len(javaMappings) > 0 {
-			javaanalyzer.SetLanguageMappings(javaMappings)
-		}
 
 		// Scan Go code
 		goIssues, goErr := analyzer.ScanDirectory(target, factory)

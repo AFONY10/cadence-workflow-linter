@@ -10,15 +10,43 @@ import (
 )
 
 type MapIterationDetector struct {
-	rules   []config.FunctionRule
-	ctx     FileContext
-	wr      *registry.WorkflowRegistry
-	issues  []Issue
-	pkgPath string
+	ruleID   string
+	severity string
+	message  string
+	ctx      FileContext
+	wr       *registry.WorkflowRegistry
+	issues   []Issue
+	pkgPath  string
 }
 
-func NewMapIterationDetector(rules []config.FunctionRule) *MapIterationDetector {
-	return &MapIterationDetector{rules: rules, issues: []Issue{}}
+func NewMapIterationDetector(ruleSet *config.RuleSet) *MapIterationDetector {
+	// Extract Go-specific map iteration rule from the unified schema
+	// Default values if rule is not found
+	ruleID := "MapIteration"
+	severity := "warning"
+	message := "Detected map iteration in workflow. Map iteration order in Go is nondeterministic; sort keys or otherwise ensure deterministic behavior."
+
+	if ruleSet != nil {
+		if rule, exists := ruleSet.Rules["MapIteration"]; exists {
+			if goLang, hasGo := rule.Languages["go"]; hasGo {
+				// Check if ast_patterns exist for range_over_map
+				for _, pattern := range goLang.ASTPatterns {
+					if pattern.Kind == "range_over_map" {
+						severity = rule.DefaultSeverity
+						message = rule.Message
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return &MapIterationDetector{
+		ruleID:   ruleID,
+		severity: severity,
+		message:  message,
+		issues:   []Issue{},
+	}
 }
 
 func (d *MapIterationDetector) SetWorkflowRegistry(reg *registry.WorkflowRegistry) { d.wr = reg }
@@ -134,10 +162,10 @@ func (d *MapIterationDetector) Visit(node ast.Node) ast.Visitor {
 					canonical := d.pkgPath + "." + funcName
 					if d.wr != nil {
 						if reachable, path := d.wr.IsReachableWithPath(canonical); reachable {
-							d.addIssueWithStack(n, "MapIteration", "warning", "Iteration over map keys is nondeterministic; avoid range over maps in workflows or make the order deterministic.", path)
+							d.addIssueWithStack(n, d.ruleID, d.severity, d.message, path)
 						}
 					} else {
-						d.addIssueWithStack(n, "MapIteration", "warning", "Iteration over map keys is nondeterministic; avoid range over maps in workflows or make the order deterministic.", nil)
+						d.addIssueWithStack(n, d.ruleID, d.severity, d.message, nil)
 					}
 				}
 			}
@@ -149,10 +177,10 @@ func (d *MapIterationDetector) Visit(node ast.Node) ast.Visitor {
 					canonical := d.pkgPath + "." + funcName
 					if d.wr != nil {
 						if reachable, path := d.wr.IsReachableWithPath(canonical); reachable {
-							d.addIssueWithStack(n, "MapIteration", "warning", "Iteration over map keys is nondeterministic; avoid range over maps in workflows or make the order deterministic.", path)
+							d.addIssueWithStack(n, d.ruleID, d.severity, d.message, path)
 						}
 					} else {
-						d.addIssueWithStack(n, "MapIteration", "warning", "Iteration over map keys is nondeterministic; avoid range over maps in workflows or make the order deterministic.", nil)
+						d.addIssueWithStack(n, d.ruleID, d.severity, d.message, nil)
 					}
 				}
 			case *ast.Ident:
@@ -161,10 +189,10 @@ func (d *MapIterationDetector) Visit(node ast.Node) ast.Visitor {
 					canonical := d.pkgPath + "." + funcName
 					if d.wr != nil {
 						if reachable, path := d.wr.IsReachableWithPath(canonical); reachable {
-							d.addIssueWithStack(n, "MapIteration", "warning", "Iteration over map keys is nondeterministic; avoid range over maps in workflows or make the order deterministic.", path)
+							d.addIssueWithStack(n, d.ruleID, d.severity, d.message, path)
 						}
 					} else {
-						d.addIssueWithStack(n, "MapIteration", "warning", "Iteration over map keys is nondeterministic; avoid range over maps in workflows or make the order deterministic.", nil)
+						d.addIssueWithStack(n, d.ruleID, d.severity, d.message, nil)
 					}
 				} else {
 					fd := findEnclosingFuncDecl(d.ctx.Node, n.Pos())
@@ -173,10 +201,10 @@ func (d *MapIterationDetector) Visit(node ast.Node) ast.Visitor {
 						canonical := d.pkgPath + "." + funcName
 						if d.wr != nil {
 							if reachable, path := d.wr.IsReachableWithPath(canonical); reachable {
-								d.addIssueWithStack(n, "MapIteration", "warning", "Iteration over map keys is nondeterministic; avoid range over maps in workflows or make the order deterministic.", path)
+								d.addIssueWithStack(n, d.ruleID, d.severity, d.message, path)
 							}
 						} else {
-							d.addIssueWithStack(n, "MapIteration", "warning", "Iteration over map keys is nondeterministic; avoid range over maps in workflows or make the order deterministic.", nil)
+							d.addIssueWithStack(n, d.ruleID, d.severity, d.message, nil)
 						}
 					}
 				}
@@ -188,10 +216,10 @@ func (d *MapIterationDetector) Visit(node ast.Node) ast.Visitor {
 						canonical := d.pkgPath + "." + funcName
 						if d.wr != nil {
 							if reachable, path := d.wr.IsReachableWithPath(canonical); reachable {
-								d.addIssueWithStack(n, "MapIteration", "warning", "Iteration over map keys is nondeterministic; avoid range over maps in workflows or make the order deterministic.", path)
+								d.addIssueWithStack(n, d.ruleID, d.severity, d.message, path)
 							}
 						} else {
-							d.addIssueWithStack(n, "MapIteration", "warning", "Iteration over map keys is nondeterministic; avoid range over maps in workflows or make the order deterministic.", nil)
+							d.addIssueWithStack(n, d.ruleID, d.severity, d.message, nil)
 						}
 					}
 				}

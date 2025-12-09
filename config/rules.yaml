@@ -1,99 +1,155 @@
-function_calls:
-  - rule: TimeUsage
-    package: time
-    functions: [Now, Since, Sleep]
-    severity: error
+rules:
+  TimeUsage:
+    description: "Use Cadence workflow clock instead of system time."
+    default_severity: error
     message: "Detected %FUNC%() in workflow. Use workflow.Now(ctx)/workflow.Sleep(ctx) instead."
 
-  - rule: Randomness
-    package: math/rand
-    functions: [Intn, Int, Float32, Float64, Read]
-    severity: error
+    languages:
+      go:
+        function_calls:
+          - import: time
+            functions: [Now, Since, Sleep]
+
+      java:
+        method_calls:
+          - package: java.time
+            types: []        # any type in java.time using now()
+            methods: [now]
+          - package: java.lang
+            types: [System]
+            methods: [currentTimeMillis]
+
+  Randomness:
+    description: "Use deterministic patterns or workflow.SideEffect instead of random APIs."
+    default_severity: error
     message: "Detected %FUNC%() in workflow. Avoid nondeterminism; use workflow.SideEffect if needed."
 
-  - rule: IOCalls
-    package: os
-    functions: [Open, OpenFile, ReadFile, WriteFile, Mkdir, Remove]
-    severity: error
-    message: "Detected %FUNC%() in workflow. Avoid file I/O inside workflows."
+    languages:
+      go:
+        function_calls:
+          - import: math/rand
+            functions: [Intn, Int, Float32, Float64, Read]
 
-  - rule: IOCalls
-    package: fmt
-    functions: [Println, Printf, Print]
-    severity: warning
-    message: "Detected %FUNC%() in workflow. Use workflow.GetLogger(ctx) instead."
+      java:
+        method_calls:
+          - package: java.util
+            types: [Random]
+            methods: [nextInt, nextDouble, nextFloat, nextLong]
+          - package: java.util.concurrent
+            types: [ThreadLocalRandom]
+            methods: [current, nextInt, nextDouble, nextLong]
 
-network_calls:
-  - rule: Network
-    package: net/http
-    functions: [Get, Post, Do, Head]
-    severity: error
-    message: "Detected HTTP call in workflow. Use workflow activities for network calls."
+  IOCalls:
+    description: "Avoid direct I/O in workflows; delegate to activities."
+    default_severity: error
+    message: "Detected %FUNC%() in workflow. Avoid file or console I/O inside workflows."
 
-map_iteration:
-  - rule: MapIteration
-    severity: warning
+    languages:
+      go:
+        function_calls:
+          - import: os
+            functions: [Open, OpenFile, ReadFile, WriteFile, Mkdir, Remove]
+            severity: error
+          - import: fmt
+            functions: [Println, Printf, Print]
+            severity: warning
+            message: "Detected %FUNC%() in workflow. Use workflow.GetLogger(ctx) instead."
+
+      java:
+        method_calls:
+          - package: java.nio.file
+            types: [Files]
+            methods: [readAllBytes]
+            severity: error
+          - package: java.io
+            types: [FileInputStream, FileOutputStream]
+            methods: [read, write]
+            severity: error
+
+  Network:
+    description: "Network calls must be performed via activities."
+    default_severity: error
+    message: "Detected HTTP/network call in workflow. Use workflow activities instead."
+
+    languages:
+      go:
+        function_calls:
+          - import: net/http
+            functions: [Get, Post, Do, Head]
+
+      java:
+        method_calls:
+          - package: java.net.http
+            types: [HttpClient]
+            methods: [send, sendAsync]
+
+  MapIteration:
+    description: "Map iteration order is nondeterministic in Go."
+    default_severity: warning
     message: "Detected map iteration in workflow. Map iteration order in Go is nondeterministic; sort keys or otherwise ensure deterministic behavior."
 
-disallowed_imports:
-  - rule: ImportRandom
-    path: math/rand
-    severity: warning
+    languages:
+      go:
+        ast_patterns:
+          - kind: range_over_map   # adapter-specific keyword; you interpret it
+
+  ImportRandom:
+    description: "Discourage math/rand in files that contain workflows."
+    default_severity: warning
     message: "Importing math/rand in files with workflows is discouraged; consider deterministic alternatives."
 
-# External package rules for common third-party libraries
-external_packages:
-  # UUID Generation (very common issue)
-  - rule: UUIDGeneration
-    package: github.com/google/uuid
-    functions: [New, NewRandom, NewString]
-    severity: error
+    languages:
+      go:
+        imports:
+          disallowed:
+            - path: math/rand
+
+  UUIDGeneration:
+    description: "UUID generation is nondeterministic and must be wrapped in SideEffect."
+    default_severity: error
     message: "UUID generation is non-deterministic. Use workflow.SideEffect for UUID generation in workflows."
 
-  # Popular HTTP client libraries
-  - rule: HTTPClient
-    package: github.com/go-resty/resty/v2
-    functions: [Get, Post, Put, Delete, Execute]
-    severity: error
+    languages:
+      go:
+        function_calls:
+          - import: github.com/google/uuid
+            functions: [New, NewRandom, NewString]
+
+      java:
+        method_calls:
+          - package: java.util
+            types: [UUID]
+            methods: [randomUUID]
+
+  HTTPClient:
+    description: "HTTP clients should be used from activities, not directly from workflows."
+    default_severity: error
     message: "HTTP calls should be performed in activities, not directly in workflows."
 
-  # Redis operations (common in microservices)
-  - rule: RedisOperations
-    package: github.com/go-redis/redis/v8
-    functions: [Get, Set, Del, Exists, Incr, Decr, HGet, HSet]
-    severity: error
+    languages:
+      go:
+        function_calls:
+          - import: github.com/go-resty/resty/v2
+            functions: [Get, Post, Put, Delete, Execute]
+
+  RedisOperations:
+    description: "Redis operations should be performed in activities."
+    default_severity: error
     message: "Redis operations should be performed in activities to ensure workflow determinism."
 
-# Known safe external packages that can be used in workflows
-safe_external_packages:
-  - github.com/pkg/errors      # Error handling - pure functions
-  - go.uber.org/zap           # Logging - safe when configured properly  
-  - github.com/stretchr/testify # Testing - only used in tests
-  - golang.org/x/crypto/bcrypt  # Deterministic crypto operations
+    languages:
+      go:
+        function_calls:
+          - import: github.com/go-redis/redis/v8
+            functions: [Get, Set, Del, Exists, Incr, Decr, HGet, HSet]
 
-language_mappings:
-  java:
-    TimeUsage:
-      - "\\bInstant\\.now\\s*\\("
-      - "\\bSystem\\.currentTimeMillis\\s*\\("
-    Randomness:
-      - "\\bnew\\s+Random\\s*\\("
-      - "\\bThreadLocalRandom\\."
-      - "\\bRandom\\."
-    IOCalls:
-      - "\\bFiles\\.readAllBytes\\s*\\("
-      - "\\bFileInputStream\\."
+safe_imports:
   go:
-    TimeUsage:
-      - "\\btime\\.Now\\s*\\("
-      - "\\btime\\.Since\\s*\\("
-      - "\\btime\\.Sleep\\s*\\("
-    Randomness:
-      - "\\bmath/rand\\.Intn\\s*\\("
-      - "\\bmath/rand\\.Int\\s*\\("
-      - "\\bmath/rand\\.Float32\\s*\\("
-    IOCalls:
-      - "\\bfmt\\.Println\\s*\\("
-      - "\\bos\\.Open\\s*\\("
-    UUIDGeneration:
-      - "github.com/google/uuid.New"
+    - github.com/pkg/errors
+    - go.uber.org/zap
+    - github.com/stretchr/testify
+    - golang.org/x/crypto/bcrypt
+
+  java:
+    - org.slf4j
+    - com.google.guava

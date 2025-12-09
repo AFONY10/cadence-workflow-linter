@@ -3,7 +3,6 @@ package detectors
 import (
 	"fmt"
 	"go/ast"
-	"regexp"
 	"strings"
 
 	"github.com/afony10/cadence-workflow-linter/adapters/go/analyzer/modutils"
@@ -11,77 +10,69 @@ import (
 	"github.com/afony10/cadence-workflow-linter/config"
 )
 
-type FuncCallDetector struct {
-	rules            []config.FunctionRule
-	externalRules    []config.ExternalPackageRule
-	safeExternalPkgs []string
-	moduleInfo       *modutils.ModuleInfo // For hybrid package classification
-	ctx              FileContext
-	wr               *registry.WorkflowRegistry
-	currFunc         string
-	pkgPath          string // package path for the current file
-	issues           []Issue
-	functionSet      map[string]map[string]config.FunctionRule        // importPath -> funcName -> rule
-	externalFuncSet  map[string]map[string]config.ExternalPackageRule // external importPath -> funcName -> rule
-	// compiled language mappings (ruleID -> regexps)
-	languageMappings map[string][]*regexp.Regexp
-	// rule lookup by ID
-	ruleByID    map[string]config.FunctionRule
-	extRuleByID map[string]config.ExternalPackageRule
+// ruleInfo holds information extracted from the unified schema for a specific import+function combination
+type ruleInfo struct {
+	ruleID   string
+	severity string
+	message  string
 }
 
-func NewFuncCallDetector(rules []config.FunctionRule, externalRules []config.ExternalPackageRule, safeExternalPkgs []string, moduleInfo *modutils.ModuleInfo) *FuncCallDetector {
-	// Build regular function rules map
-	fnSet := map[string]map[string]config.FunctionRule{}
-	for _, r := range rules {
-		p := r.Package
-		if _, ok := fnSet[p]; !ok {
-			fnSet[p] = map[string]config.FunctionRule{}
+type FuncCallDetector struct {
+	safeImports []string
+	moduleInfo  *modutils.ModuleInfo // For hybrid package classification
+	ctx         FileContext
+	wr          *registry.WorkflowRegistry
+	currFunc    string
+	pkgPath     string // package path for the current file
+	issues      []Issue
+	// importPath -> funcName -> ruleInfo
+	functionSet map[string]map[string]ruleInfo
+}
+
+func NewFuncCallDetector(ruleSet *config.RuleSet, moduleInfo *modutils.ModuleInfo) *FuncCallDetector {
+	// Extract Go-specific rules from the unified schema
+	fnSet := make(map[string]map[string]ruleInfo)
+
+	for ruleID, rule := range ruleSet.Rules {
+		goLang, hasGo := rule.Languages["go"]
+		if !hasGo {
+			continue
 		}
-		for _, f := range r.Functions {
-			fnSet[p][f] = r
+
+		// Process function_calls
+		for _, fc := range goLang.FunctionCalls {
+			if _, ok := fnSet[fc.Import]; !ok {
+				fnSet[fc.Import] = make(map[string]ruleInfo)
+			}
+
+			// Determine severity and message (function-level overrides, or fall back to rule defaults)
+			severity := fc.Severity
+			if severity == "" {
+				severity = rule.DefaultSeverity
+			}
+			message := fc.Message
+			if message == "" {
+				message = rule.Message
+			}
+
+			for _, fn := range fc.Functions {
+				fnSet[fc.Import][fn] = ruleInfo{
+					ruleID:   ruleID,
+					severity: severity,
+					message:  message,
+				}
+			}
 		}
 	}
 
-	// Build external package rules map
-	extFnSet := map[string]map[string]config.ExternalPackageRule{}
-	for _, r := range externalRules {
-		p := r.Package
-		if _, ok := extFnSet[p]; !ok {
-			extFnSet[p] = map[string]config.ExternalPackageRule{}
-		}
-		for _, f := range r.Functions {
-			extFnSet[p][f] = r
-		}
-	}
-
-	// build rule id maps
-	ruleByID := make(map[string]config.FunctionRule)
-	for _, r := range rules {
-		ruleByID[r.Rule] = r
-	}
-	extRuleByID := make(map[string]config.ExternalPackageRule)
-	for _, r := range externalRules {
-		extRuleByID[r.Rule] = r
-	}
+	safeImports := ruleSet.GetSafeImports("go")
 
 	return &FuncCallDetector{
-		rules:            rules,
-		externalRules:    externalRules,
-		safeExternalPkgs: safeExternalPkgs,
-		moduleInfo:       moduleInfo,
-		issues:           []Issue{},
-		functionSet:      fnSet,
-		externalFuncSet:  extFnSet,
-		languageMappings: nil,
-		ruleByID:         ruleByID,
-		extRuleByID:      extRuleByID,
+		safeImports: safeImports,
+		moduleInfo:  moduleInfo,
+		issues:      []Issue{},
+		functionSet: fnSet,
 	}
-}
-
-// SetLanguageMappings supplies compiled regex mappings for a language (e.g. "go").
-func (d *FuncCallDetector) SetLanguageMappings(m map[string][]*regexp.Regexp) {
-	d.languageMappings = m
 }
 
 func (d *FuncCallDetector) SetWorkflowRegistry(reg *registry.WorkflowRegistry) { d.wr = reg }
@@ -112,46 +103,18 @@ func (d *FuncCallDetector) Visit(node ast.Node) ast.Visitor {
 			importPath = pkgAlias // best-effort for stdlib aliases like "time"
 		}
 		funcName := n.Sel.Name
-
-		// Try language mappings first (if supplied)
 		qualified := importPath + "." + funcName
-		if d.languageMappings != nil {
-			for ruleID, regs := range d.languageMappings {
-				for _, re := range regs {
-					if re.MatchString(qualified) {
-						// find a matching rule definition to get severity/message
-						if r, ok := d.ruleByID[ruleID]; ok {
-							d.createIssueIfInWorkflow(n, r.Rule, r.Severity, strings.ReplaceAll(r.Message, "%FUNC%", funcName), qualified)
-						} else if er, ok := d.extRuleByID[ruleID]; ok {
-							d.createIssueIfInWorkflow(n, er.Rule, er.Severity, strings.ReplaceAll(er.Message, "%FUNC%", funcName), qualified)
-						} else {
-							// fallback: emit with ruleID as-is
-							d.createIssueIfInWorkflow(n, ruleID, "error", strings.ReplaceAll("Detected %FUNC%() in workflow.", "%FUNC%", funcName), qualified)
-						}
-						return d
-					}
-				}
-			}
-		}
 
-		// Check regular function call rules next
+		// Check function call rules
 		if ruleMap, ok := d.functionSet[importPath]; ok {
 			if rule, ok := ruleMap[funcName]; ok {
-				d.createIssueIfInWorkflow(n, rule.Rule, rule.Severity, strings.ReplaceAll(rule.Message, "%FUNC%", funcName), qualified)
-				return d
-			}
-		}
-
-		// Check external package rules
-		if extRuleMap, ok := d.externalFuncSet[importPath]; ok {
-			if extRule, ok := extRuleMap[funcName]; ok {
-				d.createIssueIfInWorkflow(n, extRule.Rule, extRule.Severity, strings.ReplaceAll(extRule.Message, "%FUNC%", funcName), qualified)
+				d.createIssueIfInWorkflow(n, rule.ruleID, rule.severity, strings.ReplaceAll(rule.message, "%FUNC%", funcName), qualified)
 				return d
 			}
 		}
 
 		// Check if it's a safe external package (no issue needed)
-		if d.isSafeExternalPackage(importPath) {
+		if d.isSafeImport(importPath) {
 			return d
 		}
 
@@ -198,9 +161,9 @@ func (d *FuncCallDetector) createIssueIfInWorkflow(node *ast.SelectorExpr, rule,
 	}
 }
 
-// Helper method to check if a package is in the safe external packages list
-func (d *FuncCallDetector) isSafeExternalPackage(importPath string) bool {
-	for _, safePkg := range d.safeExternalPkgs {
+// Helper method to check if a package is in the safe imports list
+func (d *FuncCallDetector) isSafeImport(importPath string) bool {
+	for _, safePkg := range d.safeImports {
 		if importPath == safePkg || strings.HasPrefix(importPath, safePkg+"/") {
 			return true
 		}
@@ -220,13 +183,13 @@ func (d *FuncCallDetector) isUnknownExternalPackage(importPath string) bool {
 		return false
 	}
 
-	// Skip if it's in our known external rules
-	if _, exists := d.externalFuncSet[importPath]; exists {
+	// Skip if it's in our known rules
+	if _, exists := d.functionSet[importPath]; exists {
 		return false
 	}
 
-	// Skip if it's a safe external package
-	if d.isSafeExternalPackage(importPath) {
+	// Skip if it's a safe import
+	if d.isSafeImport(importPath) {
 		return false
 	}
 

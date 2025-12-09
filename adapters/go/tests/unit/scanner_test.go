@@ -95,7 +95,7 @@ func TestFuncCallDetector_TimeUsage(t *testing.T) {
 	}
 
 	fset, node, file := parse(t, "time_violation.go")
-	d := detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, nil)
+	d := detectors.NewFuncCallDetector(rules, nil)
 	issues := walkOnce(t, d, fset, node, file)
 	if len(issues) == 0 {
 		t.Fatalf("expected at least one TimeUsage issue in %s", file)
@@ -109,7 +109,7 @@ func TestFuncCallDetector_Randomness(t *testing.T) {
 	}
 
 	fset, node, file := parse(t, "rand_violation.go")
-	d := detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, nil)
+	d := detectors.NewFuncCallDetector(rules, nil)
 	issues := walkOnce(t, d, fset, node, file)
 	if len(issues) == 0 {
 		t.Fatalf("expected at least one Randomness issue in %s", file)
@@ -123,7 +123,7 @@ func TestFuncCallDetector_IOCalls(t *testing.T) {
 	}
 
 	fset, node, file := parse(t, "io_violation.go")
-	d := detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, nil)
+	d := detectors.NewFuncCallDetector(rules, nil)
 	issues := walkOnce(t, d, fset, node, file)
 	if len(issues) == 0 {
 		t.Fatalf("expected at least one IOCalls issue in %s", file)
@@ -155,7 +155,7 @@ func TestActivityNotFlagged(t *testing.T) {
 	}
 
 	fset, node, file := parse(t, "activity_ok.go")
-	d := detectors.NewFuncCallDetector(rules.FunctionCalls, rules.ExternalPackages, rules.SafeExternalPackages, nil)
+	d := detectors.NewFuncCallDetector(rules, nil)
 	issues := walkOnce(t, d, fset, node, file)
 
 	if len(issues) != 0 {

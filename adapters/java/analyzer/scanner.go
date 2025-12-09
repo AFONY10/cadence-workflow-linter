@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,13 +11,112 @@ import (
 	"github.com/afony10/cadence-workflow-linter/core"
 )
 
-// precompiledMappings can be set by the caller (CLI) to avoid recompiling
-// regexes in each scanner invocation. Keys are rule IDs.
-var precompiledMappings map[string][]*regexp.Regexp
+// matchInfo represents a detected method call match
+type matchInfo struct {
+	line    int
+	callee  string
+	pattern javaMethodPattern
+}
 
-// SetLanguageMappings allows the CLI to supply precompiled regex mappings for Java.
-func SetLanguageMappings(m map[string][]*regexp.Regexp) {
-	precompiledMappings = m
+// javaMethodPattern represents a pattern extracted from the unified rules schema
+type javaMethodPattern struct {
+	ruleID   string
+	pkg      string
+	types    []string
+	methods  []string
+	severity string
+	message  string
+}
+
+// MethodInfo represents a single method in a Java file (used by scanner.go)
+type MethodInfo struct {
+	Name       string
+	StartLine  int
+	EndLine    int
+	BodyLines  []string
+	Matches    map[string][]matchInfo // ruleID -> matched calls
+	IsWorkflow bool
+	IsActivity bool
+	Calls      map[string]bool
+}
+
+// MethodInfoMultiFile represents a method in multi-file analysis (used by scan_files.go)
+type MethodInfoMultiFile struct {
+	Key        string
+	File       string
+	Name       string
+	StartLine  int
+	EndLine    int
+	BodyLines  []string
+	Matches    map[string][]matchInfo
+	IsWorkflow bool
+	Calls      map[string][]int
+}
+
+// buildJavaRulePatterns extracts Java method_calls from the unified schema
+func buildJavaRulePatterns(rules *config.RuleSet) []javaMethodPattern {
+	var patterns []javaMethodPattern
+
+	for ruleID, rule := range rules.Rules {
+		javaLang, hasJava := rule.Languages["java"]
+		if !hasJava {
+			continue
+		}
+
+		for _, mc := range javaLang.MethodCalls {
+			// Determine severity and message
+			severity := mc.Severity
+			if severity == "" {
+				severity = rule.DefaultSeverity
+			}
+			message := mc.Message
+			if message == "" {
+				message = rule.Message
+			}
+
+			patterns = append(patterns, javaMethodPattern{
+				ruleID:   ruleID,
+				pkg:      mc.Package,
+				types:    mc.Types,
+				methods:  mc.Methods,
+				severity: severity,
+				message:  message,
+			})
+		}
+	}
+
+	return patterns
+}
+
+// matchesPattern checks if a method call matches a Java pattern
+func matchesPattern(pkg, typeName, methodName string, pattern javaMethodPattern) bool {
+	// Check package match
+	if pattern.pkg != "" && !strings.Contains(pkg, pattern.pkg) {
+		return false
+	}
+
+	// Check type match (empty means any type)
+	if len(pattern.types) > 0 {
+		typeMatches := false
+		for _, t := range pattern.types {
+			if typeName == t || strings.Contains(typeName, t) {
+				typeMatches = true
+				break
+			}
+		}
+		if !typeMatches {
+			return false
+		}
+	}
+
+	// Check method match
+	for _, m := range pattern.methods {
+		if methodName == m {
+			return true
+		}
+	}
+
+	return false
 }
 
 // ScanDirectory walks the given directory (or single file path) and returns
@@ -65,9 +165,10 @@ func ScanFile(path string, rules *config.RuleSet) ([]core.Issue, error) {
 	return scanFile(path, rules)
 }
 
+// Common regex patterns for Java code analysis
 var (
-	reInstant = regexp.MustCompile(`\bInstant\.now\s*\(`)
-	reSysNow  = regexp.MustCompile(`\bSystem\.currentTimeMillis\s*\(`)
+	reMethodCall = regexp.MustCompile(`\b([A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)*?)\.([a-z][A-Za-z0-9_]*)\s*\(`)
+	reNew        = regexp.MustCompile(`\bnew\s+([A-Z][A-Za-z0-9_]*)\s*\(`)
 )
 
 // scanFile analyzes a single file using the provided RuleSet.
@@ -90,50 +191,12 @@ func scanFile(path string, rules *config.RuleSet) ([]core.Issue, error) {
 	// Determine if the file contains any workflow indicators (annotations, class names, package)
 	fileHasWorkflowIndicator := strings.Contains(content, "@WorkflowMethod") || strings.Contains(content, "@WorkflowInterface") || strings.Contains(content, "implements Workflow") || strings.Contains(strings.ToLower(content), "class") && strings.Contains(content, "Workflow") || strings.Contains(strings.ToLower(content), "package") && strings.Contains(strings.ToLower(content), "workflow")
 
-	// Prepare Java-specific patterns for known rule IDs. Prefer precompiled
-	// mappings if provided by the caller (see SetLanguageMappings), otherwise
-	// fall back to mappings present in rules.LanguageMappings.
-	javaRulePatterns := map[string][]*regexp.Regexp{}
-	if precompiledMappings != nil && len(precompiledMappings) > 0 {
-		for ruleID, regs := range precompiledMappings {
-			javaRulePatterns[ruleID] = append(javaRulePatterns[ruleID], regs...)
-		}
-	} else if rules != nil && rules.LanguageMappings != nil {
-		if jm, ok := rules.LanguageMappings["java"]; ok {
-			for ruleID, pats := range jm {
-				for _, p := range pats {
-					// try compiling as regex; fall back to literal match if invalid
-					if re, err := regexp.Compile(p); err == nil {
-						javaRulePatterns[ruleID] = append(javaRulePatterns[ruleID], re)
-					} else {
-						javaRulePatterns[ruleID] = append(javaRulePatterns[ruleID], regexp.MustCompile(regexp.QuoteMeta(p)))
-					}
-				}
-			}
-		}
-	}
-	// fallbacks if YAML doesn't provide mappings
-	if _, ok := javaRulePatterns["TimeUsage"]; !ok {
-		javaRulePatterns["TimeUsage"] = []*regexp.Regexp{reInstant, reSysNow}
-	}
-	if _, ok := javaRulePatterns["Randomness"]; !ok {
-		javaRulePatterns["Randomness"] = []*regexp.Regexp{regexp.MustCompile(`\bnew\s+Random\s*\(`), regexp.MustCompile(`\bThreadLocalRandom\.`), regexp.MustCompile(`\bRandom\.`)}
-	}
+	// Build Java patterns from unified schema
+	javaPatterns := buildJavaRulePatterns(rules)
 
 	// Parse methods with a simple state machine: capture annotations, method signatures and bodies
 	methodSigRe := regexp.MustCompile(`^\s*(?:public|protected|private|static|final|synchronized|\s)*[\w\<\>\[\]]+\s+([A-Za-z0-9_]+)\s*\([^\)]*\)\s*\{?\s*$`)
 	callRe := regexp.MustCompile(`\b([A-Za-z0-9_]+)\s*\(`)
-
-	type MethodInfo struct {
-		Name       string
-		StartLine  int
-		EndLine    int
-		BodyLines  []string
-		Matches    map[string][]int // ruleID -> line numbers where pattern matched
-		IsWorkflow bool
-		IsActivity bool
-		Calls      map[string]bool
-	}
 
 	methods := make(map[string]*MethodInfo)
 	var className string
@@ -219,18 +282,59 @@ func scanFile(path string, rules *config.RuleSet) ([]core.Issue, error) {
 			mi.EndLine = j + 1
 
 			// scan body for configured rule patterns and calls
-			mi.Matches = make(map[string][]int)
+			mi.Matches = make(map[string][]matchInfo)
 			for k, bl := range bodyLines {
 				absLine := i + k + 1
-				// check each configured Java pattern for rule IDs
-				for ruleID, pats := range javaRulePatterns {
-					for _, p := range pats {
-						if p.MatchString(bl) {
-							mi.Matches[ruleID] = append(mi.Matches[ruleID], absLine)
+
+				// Check Java method call patterns from unified schema
+				for _, pattern := range javaPatterns {
+					// Check for method calls: Type.method() or object.method()
+					if matches := reMethodCall.FindAllStringSubmatch(bl, -1); matches != nil {
+						for _, m := range matches {
+							if len(m) >= 3 {
+								typePart := m[1]
+								methodName := m[2]
+
+								// Extract the simple type name from qualified name
+								typeSegments := strings.Split(typePart, ".")
+								simpleType := typeSegments[len(typeSegments)-1]
+
+								if matchesPattern(pattern.pkg, simpleType, methodName, pattern) {
+									callee := fmt.Sprintf("%s.%s.%s", pattern.pkg, simpleType, methodName)
+									mi.Matches[pattern.ruleID] = append(mi.Matches[pattern.ruleID], matchInfo{
+										line:    absLine,
+										callee:  callee,
+										pattern: pattern,
+									})
+								}
+							}
+						}
+					}
+
+					// Check for constructor calls: new Type()
+					if matches := reNew.FindAllStringSubmatch(bl, -1); matches != nil {
+						for _, m := range matches {
+							if len(m) >= 2 {
+								typeName := m[1]
+								// Check if pattern is looking for constructor calls
+								for _, methodName := range pattern.methods {
+									if strings.EqualFold(methodName, "new") || strings.EqualFold(methodName, typeName) {
+										if matchesPattern(pattern.pkg, typeName, methodName, pattern) {
+											callee := fmt.Sprintf("%s.%s", pattern.pkg, typeName)
+											mi.Matches[pattern.ruleID] = append(mi.Matches[pattern.ruleID], matchInfo{
+												line:    absLine,
+												callee:  callee,
+												pattern: pattern,
+											})
+										}
+									}
+								}
+							}
 						}
 					}
 				}
-				// find bare calls
+
+				// find bare calls for call graph
 				for _, cm := range callRe.FindAllStringSubmatch(bl, -1) {
 					if len(cm) > 1 {
 						callee := cm[1]
@@ -303,29 +407,16 @@ func scanFile(path string, rules *config.RuleSet) ([]core.Issue, error) {
 		if !reachable[name] {
 			continue
 		}
-		for ruleID, linesMatched := range m.Matches {
-			for _, ln := range linesMatched {
-				// find matched text for Callee hint
-				text := ""
-				if ln-1 < len(lines) && ln-1 >= 0 {
-					text = strings.TrimSpace(lines[ln-1])
-				}
-				callee := ""
-				// heuristics: pick a likely callee token from the line
-				if idx := strings.Index(text, "Instant.now"); idx >= 0 {
-					callee = "java.time.Instant.now"
-				} else if idx := strings.Index(text, "System.currentTimeMillis"); idx >= 0 {
-					callee = "java.lang.System.currentTimeMillis"
-				}
-
+		for ruleID, matches := range m.Matches {
+			for _, match := range matches {
 				issues = append(issues, core.Issue{
 					File:     path,
-					Line:     ln,
+					Line:     match.line,
 					Rule:     ruleID,
-					Severity: "warning",
-					Message:  "",
+					Severity: match.pattern.severity,
+					Message:  strings.ReplaceAll(match.pattern.message, "%FUNC%", match.callee),
 					Func:     name,
-					Callee:   callee,
+					Callee:   match.callee,
 				})
 			}
 		}

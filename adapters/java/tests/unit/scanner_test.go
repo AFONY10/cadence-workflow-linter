@@ -37,6 +37,56 @@ func TestJavaTimeUsageInWorkflow(t *testing.T) {
 	}
 }
 
+// TestJavaRandomnessDetection verifies that Java randomness usage is detected inside workflows
+func TestJavaRandomnessDetection(t *testing.T) {
+	rules, err := config.LoadRules("../../../../config/rules.yaml")
+	if err != nil {
+		t.Fatalf("load rules: %v", err)
+	}
+
+	issues, err := javaanalyzer.ScanDirectory("../testdata", rules)
+	if err != nil {
+		t.Fatalf("scan directory: %v", err)
+	}
+
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.File, "RandomWorkflow.java") && issue.Rule == "Randomness" {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("Expected Randomness issue in RandomWorkflow.java, found none")
+	}
+}
+
+// TestJavaIOCallsDetection verifies that Java IO usage is detected inside workflows
+func TestJavaIOCallsDetection(t *testing.T) {
+	rules, err := config.LoadRules("../../../../config/rules.yaml")
+	if err != nil {
+		t.Fatalf("load rules: %v", err)
+	}
+
+	issues, err := javaanalyzer.ScanDirectory("../testdata", rules)
+	if err != nil {
+		t.Fatalf("scan directory: %v", err)
+	}
+
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.File, "IOWorkflow.java") && issue.Rule == "IOCalls" {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("Expected IOCalls issue in IOWorkflow.java, found none")
+	}
+}
+
 // TestJavaTimeUsageInHelper verifies that helper methods called from workflows are analyzed
 func TestJavaTimeUsageInHelper(t *testing.T) {
 	rules, err := config.LoadRules("../../../../config/rules.yaml")
@@ -87,25 +137,30 @@ func TestJavaActivityNotFlagged(t *testing.T) {
 	}
 }
 
-// TestJavaLanguageMappings verifies that precompiled language mappings are used
-func TestJavaLanguageMappings(t *testing.T) {
+// TestJavaUnifiedSchema verifies that Java adapter uses the unified rules schema
+func TestJavaUnifiedSchema(t *testing.T) {
 	rules, err := config.LoadRules("../../../../config/rules.yaml")
 	if err != nil {
 		t.Fatalf("load rules: %v", err)
 	}
 
-	// Compile Java mappings
-	javaMappings, err := rules.CompileLanguageMappings("java")
-	if err != nil {
-		t.Fatalf("compile java mappings: %v", err)
+	// Verify that rules exist and contain Java language-specific definitions
+	if rules.Rules == nil || len(rules.Rules) == 0 {
+		t.Fatalf("Expected rules in rules.yaml, found none")
 	}
 
-	if len(javaMappings) == 0 {
-		t.Fatalf("Expected java language mappings in rules.yaml, found none")
+	hasJavaRules := false
+	for _, rule := range rules.Rules {
+		if _, ok := rule.Languages["java"]; ok {
+			hasJavaRules = true
+			break
+		}
+	}
+	if !hasJavaRules {
+		t.Fatalf("Expected at least one rule with Java language definition")
 	}
 
-	// Set mappings and scan
-	javaanalyzer.SetLanguageMappings(javaMappings)
+	// Scan using the unified schema
 	issues, err := javaanalyzer.ScanDirectory("../testdata", rules)
 	if err != nil {
 		t.Fatalf("scan directory: %v", err)
@@ -114,9 +169,9 @@ func TestJavaLanguageMappings(t *testing.T) {
 	// Apply config overrides to populate messages
 	issues = core.ApplyConfigOverrides(issues, rules)
 
-	// Should detect at least one issue using the mappings
+	// Should detect at least one issue using the unified schema
 	if len(issues) == 0 {
-		t.Errorf("Expected at least one issue when using language mappings, found none")
+		t.Errorf("Expected at least one issue when using unified schema, found none")
 	}
 
 	// Verify issues have proper structure

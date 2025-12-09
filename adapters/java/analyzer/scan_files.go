@@ -13,47 +13,10 @@ import (
 
 // scanFiles implements a project-scoped analysis across multiple Java files.
 func scanFiles(paths []string, rules *config.RuleSet) ([]core.Issue, error) {
-	// Prepare Java-specific patterns for known rule IDs. Prefer precompiled
-	// mappings if set by the caller; otherwise compile from rules.LanguageMappings.
-	javaRulePatterns := map[string][]*regexp.Regexp{}
-	if precompiledMappings != nil && len(precompiledMappings) > 0 {
-		for ruleID, regs := range precompiledMappings {
-			javaRulePatterns[ruleID] = append(javaRulePatterns[ruleID], regs...)
-		}
-	} else if rules != nil && rules.LanguageMappings != nil {
-		if jm, ok := rules.LanguageMappings["java"]; ok {
-			for ruleID, pats := range jm {
-				for _, p := range pats {
-					if re, err := regexp.Compile(p); err == nil {
-						javaRulePatterns[ruleID] = append(javaRulePatterns[ruleID], re)
-					} else {
-						javaRulePatterns[ruleID] = append(javaRulePatterns[ruleID], regexp.MustCompile(regexp.QuoteMeta(p)))
-					}
-				}
-			}
-		}
-	}
-	// fallbacks
-	if _, ok := javaRulePatterns["TimeUsage"]; !ok {
-		javaRulePatterns["TimeUsage"] = []*regexp.Regexp{reInstant, reSysNow}
-	}
-	if _, ok := javaRulePatterns["Randomness"]; !ok {
-		javaRulePatterns["Randomness"] = []*regexp.Regexp{regexp.MustCompile(`\bnew\s+Random\s*\(`), regexp.MustCompile(`\bThreadLocalRandom\.`), regexp.MustCompile(`\bRandom\.`)}
-	}
+	// Build Java patterns from unified schema
+	javaPatterns := buildJavaRulePatterns(rules)
 
-	type MethodInfo struct {
-		Key        string
-		File       string
-		Name       string
-		StartLine  int
-		EndLine    int
-		BodyLines  []string
-		Matches    map[string][]int
-		IsWorkflow bool
-		Calls      map[string][]int
-	}
-
-	methodsByKey := make(map[string]*MethodInfo)
+	methodsByKey := make(map[string]*MethodInfoMultiFile)
 	methodsByName := make(map[string][]string)
 	fileHasWorkflow := make(map[string]bool)
 
@@ -98,13 +61,13 @@ func scanFiles(paths []string, rules *config.RuleSet) ([]core.Issue, error) {
 			if matches := methodSigRe.FindStringSubmatch(t); matches != nil {
 				name := matches[1]
 				key := path + "#" + name
-				mi := &MethodInfo{
+				mi := &MethodInfoMultiFile{
 					Key:       key,
 					File:      path,
 					Name:      name,
 					StartLine: i + 1,
 					Calls:     make(map[string][]int),
-					Matches:   make(map[string][]int),
+					Matches:   make(map[string][]matchInfo),
 				}
 				if strings.Contains(lastAnnotation, "@WorkflowMethod") || strings.Contains(lastAnnotation, "@WorkflowInterface") {
 					mi.IsWorkflow = true
@@ -133,16 +96,60 @@ func scanFiles(paths []string, rules *config.RuleSet) ([]core.Issue, error) {
 
 				for k, bl := range bodyLines {
 					absLine := i + k + 1
-					for ruleID, pats := range javaRulePatterns {
-						for _, p := range pats {
-							if p.MatchString(bl) {
-								mi.Matches[ruleID] = append(mi.Matches[ruleID], absLine)
+
+					// Check Java method call patterns from unified schema
+					for _, pattern := range javaPatterns {
+						// Check for method calls: Type.method() or object.method()
+						if matches := reMethodCall.FindAllStringSubmatch(bl, -1); matches != nil {
+							for _, m := range matches {
+								if len(m) >= 3 {
+									typePart := m[1]
+									methodName := m[2]
+
+									// Extract the simple type name from qualified name
+									typeSegments := strings.Split(typePart, ".")
+									simpleType := typeSegments[len(typeSegments)-1]
+
+									if matchesPattern(pattern.pkg, simpleType, methodName, pattern) {
+										callee := fmt.Sprintf("%s.%s.%s", pattern.pkg, simpleType, methodName)
+										mi.Matches[pattern.ruleID] = append(mi.Matches[pattern.ruleID], matchInfo{
+											line:    absLine,
+											callee:  callee,
+											pattern: pattern,
+										})
+									}
+								}
+							}
+						}
+
+						// Check for constructor calls: new Type()
+						if matches := reNew.FindAllStringSubmatch(bl, -1); matches != nil {
+							for _, m := range matches {
+								if len(m) >= 2 {
+									typeName := m[1]
+									// Check if pattern is looking for constructor calls
+									for _, methodName := range pattern.methods {
+										if strings.EqualFold(methodName, "new") || strings.EqualFold(methodName, typeName) {
+											if matchesPattern(pattern.pkg, typeName, methodName, pattern) {
+												callee := fmt.Sprintf("%s.%s", pattern.pkg, typeName)
+												mi.Matches[pattern.ruleID] = append(mi.Matches[pattern.ruleID], matchInfo{
+													line:    absLine,
+													callee:  callee,
+													pattern: pattern,
+												})
+											}
+										}
+									}
+								}
 							}
 						}
 					}
+
+					// find bare calls for call graph
 					for _, cm := range callRe.FindAllStringSubmatch(bl, -1) {
 						if len(cm) > 1 {
 							callee := cm[1]
+							// ignore common language constructs
 							if callee == "if" || callee == "for" || callee == "switch" || callee == "return" || callee == "new" || callee == "throw" {
 								continue
 							}
@@ -252,23 +259,8 @@ func scanFiles(paths []string, rules *config.RuleSet) ([]core.Issue, error) {
 		if !reachable[m.Key] {
 			continue
 		}
-		for ruleID, linesMatched := range m.Matches {
-			for _, ln := range linesMatched {
-				text := ""
-				b, err := os.ReadFile(m.File)
-				if err == nil {
-					fileLines := strings.Split(string(b), "\n")
-					if ln-1 < len(fileLines) {
-						text = strings.TrimSpace(fileLines[ln-1])
-					}
-				}
-				callee := ""
-				if strings.Contains(text, "Instant.now") {
-					callee = "java.time.Instant.now"
-				} else if strings.Contains(text, "System.currentTimeMillis") {
-					callee = "java.lang.System.currentTimeMillis"
-				}
-
+		for ruleID, matches := range m.Matches {
+			for _, match := range matches {
 				// build human-readable call stack (use call-site lines for callers)
 				path, prev := findPath(m.Key)
 				callstack := []string{}
@@ -287,7 +279,7 @@ func scanFiles(paths []string, rules *config.RuleSet) ([]core.Issue, error) {
 								}
 							} else {
 								// final (reported) method: use exact issue line
-								lineNum = ln
+								lineNum = match.line
 							}
 							callstack = append(callstack, fmt.Sprintf("%s (%s:%d)", mi.Name, bn, lineNum))
 						}
@@ -296,12 +288,12 @@ func scanFiles(paths []string, rules *config.RuleSet) ([]core.Issue, error) {
 
 				issues = append(issues, core.Issue{
 					File:      m.File,
-					Line:      ln,
+					Line:      match.line,
 					Rule:      ruleID,
-					Severity:  "warning",
-					Message:   "",
+					Severity:  match.pattern.severity,
+					Message:   strings.ReplaceAll(match.pattern.message, "%FUNC%", match.callee),
 					Func:      m.Name,
-					Callee:    callee,
+					Callee:    match.callee,
 					CallStack: callstack,
 				})
 			}

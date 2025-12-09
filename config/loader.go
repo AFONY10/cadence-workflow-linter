@@ -2,42 +2,59 @@ package config
 
 import (
 	"os"
-	"regexp"
 
 	"gopkg.in/yaml.v3"
 )
 
-type FunctionRule struct {
-	Rule      string   `yaml:"rule"`
-	Package   string   `yaml:"package"`   // import path (e.g., "time", "math/rand", "fmt", "os")
-	Functions []string `yaml:"functions"` // selector names
-	Severity  string   `yaml:"severity"`  // e.g., "error", "warning"
-	Message   string   `yaml:"message"`
+// FunctionCall represents a Go-style function call pattern
+type FunctionCall struct {
+	Import    string   `yaml:"import"`             // e.g., "time", "math/rand"
+	Functions []string `yaml:"functions"`          // e.g., ["Now", "Since"]
+	Severity  string   `yaml:"severity,omitempty"` // optional override
+	Message   string   `yaml:"message,omitempty"`  // optional override
 }
 
-type ImportRule struct {
-	Rule     string `yaml:"rule"`
-	Severity string `yaml:"severity"` // e.g., "error", "warning"
-	Path     string `yaml:"path"`     // import path
-	Message  string `yaml:"message"`  // message if path is present in file with workflows
+// MethodCall represents a Java-style method call pattern
+type MethodCall struct {
+	Package  string   `yaml:"package"`            // e.g., "java.time", "java.util"
+	Types    []string `yaml:"types"`              // e.g., ["Instant", "System"], empty means any
+	Methods  []string `yaml:"methods"`            // e.g., ["now", "currentTimeMillis"]
+	Severity string   `yaml:"severity,omitempty"` // optional override
+	Message  string   `yaml:"message,omitempty"`  // optional override
 }
 
-type ExternalPackageRule struct {
-	Rule      string   `yaml:"rule"`
-	Package   string   `yaml:"package"`   // full import path (e.g., "github.com/google/uuid")
-	Functions []string `yaml:"functions"` // function names to flag
-	Severity  string   `yaml:"severity"`  // e.g., "error", "warning"
-	Message   string   `yaml:"message"`   // message when violation is detected
+// ASTPattern represents language-specific AST patterns
+type ASTPattern struct {
+	Kind string `yaml:"kind"` // e.g., "range_over_map"
 }
 
+// ImportsConfig represents import restrictions
+type ImportsConfig struct {
+	Disallowed []struct {
+		Path string `yaml:"path"`
+	} `yaml:"disallowed"`
+}
+
+// LanguageConfig holds all detection patterns for a specific language
+type LanguageConfig struct {
+	FunctionCalls []FunctionCall `yaml:"function_calls,omitempty"`
+	MethodCalls   []MethodCall   `yaml:"method_calls,omitempty"`
+	ASTPatterns   []ASTPattern   `yaml:"ast_patterns,omitempty"`
+	Imports       *ImportsConfig `yaml:"imports,omitempty"`
+}
+
+// Rule represents a single rule definition with multi-language support
+type Rule struct {
+	Description     string                    `yaml:"description"`
+	DefaultSeverity string                    `yaml:"default_severity"`
+	Message         string                    `yaml:"message"`
+	Languages       map[string]LanguageConfig `yaml:"languages"`
+}
+
+// RuleSet is the top-level configuration structure
 type RuleSet struct {
-	FunctionCalls        []FunctionRule        `yaml:"function_calls"`
-	DisallowedImports    []ImportRule          `yaml:"disallowed_imports"`
-	ExternalPackages     []ExternalPackageRule `yaml:"external_packages"`
-	SafeExternalPackages []string              `yaml:"safe_external_packages"`
-	// LanguageMappings allows adapters to provide language-specific patterns
-	// for top-level rule IDs. Structure: language -> ruleID -> []patterns
-	LanguageMappings map[string]map[string][]string `yaml:"language_mappings"`
+	Rules       map[string]Rule     `yaml:"rules"`
+	SafeImports map[string][]string `yaml:"safe_imports"`
 }
 
 func LoadRules(path string) (*RuleSet, error) {
@@ -52,27 +69,21 @@ func LoadRules(path string) (*RuleSet, error) {
 	return &rs, nil
 }
 
-// CompileLanguageMappings compiles regex patterns under LanguageMappings for
-// the given language (e.g. "go", "java"). It returns a map from ruleID to
-// compiled regexps. If no mappings exist for the language an empty map is
-// returned.
-func (rs *RuleSet) CompileLanguageMappings(lang string) (map[string][]*regexp.Regexp, error) {
-	out := make(map[string][]*regexp.Regexp)
-	if rs == nil || rs.LanguageMappings == nil {
-		return out, nil
-	}
-	lm, ok := rs.LanguageMappings[lang]
-	if !ok {
-		return out, nil
-	}
-	for ruleID, pats := range lm {
-		for _, p := range pats {
-			re, err := regexp.Compile(p)
-			if err != nil {
-				return nil, err
-			}
-			out[ruleID] = append(out[ruleID], re)
+// GetRulesForLanguage returns all rules that apply to a specific language
+func (rs *RuleSet) GetRulesForLanguage(lang string) map[string]Rule {
+	result := make(map[string]Rule)
+	for ruleID, rule := range rs.Rules {
+		if _, hasLang := rule.Languages[lang]; hasLang {
+			result[ruleID] = rule
 		}
 	}
-	return out, nil
+	return result
+}
+
+// GetSafeImports returns the list of safe imports for a language
+func (rs *RuleSet) GetSafeImports(lang string) []string {
+	if rs.SafeImports == nil {
+		return nil
+	}
+	return rs.SafeImports[lang]
 }

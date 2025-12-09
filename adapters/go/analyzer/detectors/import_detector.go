@@ -7,14 +7,43 @@ import (
 	"github.com/afony10/cadence-workflow-linter/config"
 )
 
+type importRule struct {
+	ruleID   string
+	path     string
+	severity string
+	message  string
+}
+
 type ImportDetector struct {
-	rules  []config.ImportRule
+	rules  []importRule
 	ctx    FileContext
 	wr     *registry.WorkflowRegistry
 	issues []Issue
 }
 
-func NewImportDetector(rules []config.ImportRule) *ImportDetector {
+func NewImportDetector(ruleSet *config.RuleSet) *ImportDetector {
+	var rules []importRule
+
+	// Extract Go-specific import rules from the unified schema
+	for ruleID, rule := range ruleSet.Rules {
+		goLang, hasGo := rule.Languages["go"]
+		if !hasGo {
+			continue
+		}
+
+		// Process imports
+		if goLang.Imports != nil {
+			for _, imp := range goLang.Imports.Disallowed {
+				rules = append(rules, importRule{
+					ruleID:   ruleID,
+					path:     imp.Path,
+					severity: rule.DefaultSeverity,
+					message:  rule.Message,
+				})
+			}
+		}
+	}
+
 	return &ImportDetector{rules: rules, issues: []Issue{}}
 }
 
@@ -33,14 +62,14 @@ func (d *ImportDetector) Visit(node ast.Node) ast.Visitor {
 			path = n.Path.Value[1 : len(n.Path.Value)-1]
 		}
 		for _, r := range d.rules {
-			if r.Path == path {
+			if r.path == path {
 				pos := d.ctx.Fset.Position(n.Pos())
 				d.issues = append(d.issues, Issue{
 					File:     d.ctx.File,
 					Line:     pos.Line,
-					Rule:     r.Rule,
-					Severity: r.Severity,
-					Message:  r.Message,
+					Rule:     r.ruleID,
+					Severity: r.severity,
+					Message:  r.message,
 					Func:     "",
 				})
 			}
