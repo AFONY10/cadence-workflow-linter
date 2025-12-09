@@ -70,3 +70,30 @@ safe_external_packages:
   - go.uber.org/zap           # Logging - safe when configured properly  
   - github.com/stretchr/testify # Testing - only used in tests
   - golang.org/x/crypto/bcrypt  # Deterministic crypto operations
+
+language_mappings:
+  java:
+    TimeUsage:
+      - "\\bInstant\\.now\\s*\\("
+      - "\\bSystem\\.currentTimeMillis\\s*\\("
+    Randomness:
+      - "\\bnew\\s+Random\\s*\\("
+      - "\\bThreadLocalRandom\\."
+      - "\\bRandom\\."
+    IOCalls:
+      - "\\bFiles\\.readAllBytes\\s*\\("
+      - "\\bFileInputStream\\."
+  go:
+    TimeUsage:
+      - "\\btime\\.Now\\s*\\("
+      - "\\btime\\.Since\\s*\\("
+      - "\\btime\\.Sleep\\s*\\("
+    Randomness:
+      - "\\bmath/rand\\.Intn\\s*\\("
+      - "\\bmath/rand\\.Int\\s*\\("
+      - "\\bmath/rand\\.Float32\\s*\\("
+    IOCalls:
+      - "\\bfmt\\.Println\\s*\\("
+      - "\\bos\\.Open\\s*\\("
+    UUIDGeneration:
+      - "github.com/google/uuid.New"

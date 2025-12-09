@@ -91,8 +91,8 @@ Repository layout (important folders)
 
 More docs
 ----------
-- Documentation for entire system: 
-  `Documentation/`.
+- High-level project docs: `Documentation/Overview.md`.
+- Detailed (archived) notes: `Documentation/archive/README.md`.
 - Extension-specific guidance: `vscode-extension/README.md`
 
 

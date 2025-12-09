@@ -1,76 +1,9 @@
 # Cadence Workflow Linter - Design Documentation
 
-## Table of Contents
-1. [Project Overview](#project-overview)
-2. [System Architecture](#system-architecture)
-3. [Component Design](#component-design)
-4. [Data Flow Diagrams](#data-flow-diagrams)
-5. [Class/Interface Diagrams](#classinterface-diagrams)
-6. [Sequence Diagrams](#sequence-diagrams)
-7. [Configuration Design](#configuration-design)
-8. [Detection Strategy](#detection-strategy)
+_This file has been archived. The project documentation has been simplified —
+see `Overview.md` for the current high-level documentation. The original,
+more detailed design notes have been moved to `Documentation/archive/`._
 
-## Project Overview
-
-### Purpose
-The Cadence Workflow Linter is a static analysis tool designed to identify non-deterministic or unsafe operations in Uber Cadence workflows. It ensures workflow code remains deterministic, reliable, and production-safe while avoiding false positives in activity code.
-
-### Key Goals
-- **Determinism**: Ensure workflows are deterministic and replay-safe
-- **Extensibility**: Support for adding new detection rules without core changes
-- **Accuracy**: Distinguish between workflow and activity code to avoid false positives
-- **Configurability**: Rule-based configuration through YAML files
-
-## System Architecture
-
-### High-Level Architecture Diagram
-
-```mermaid
-graph TB
-    subgraph "CLI Layer"
-        CLI[main.go<br/>Command Line Interface]
-    end
-    
-    subgraph "Core Analysis Engine"
-        ANALYZER[Analyzer<br/>scanner.go]
-        REGISTRY[Workflow Registry<br/>Call Graph Builder]
-    end
-    
-    subgraph "Detection Engine"
-        DETECTOR_FACTORY[Detector Factory]
-        FUNC_DETECTOR[Function Call Detector]
-        IMPORT_DETECTOR[Import Detector]
-        GOROUTINE_DETECTOR[Goroutine Detector]
-        CHANNEL_DETECTOR[Channel Detector]
-    end
-    
-    subgraph "Configuration"
-        CONFIG[Config Loader]
-        RULES[rules.yaml]
-    end
-    
-    subgraph "Input/Output"
-        SOURCE[Go Source Files]
-        ISSUES[Issues<br/>JSON/YAML Output]
-    end
-    
-    CLI --> ANALYZER
-    CLI --> CONFIG
-    CONFIG --> RULES
-    CONFIG --> DETECTOR_FACTORY
-    ANALYZER --> REGISTRY
-    ANALYZER --> DETECTOR_FACTORY
-    DETECTOR_FACTORY --> FUNC_DETECTOR
-    DETECTOR_FACTORY --> IMPORT_DETECTOR
-    DETECTOR_FACTORY --> GOROUTINE_DETECTOR
-    DETECTOR_FACTORY --> CHANNEL_DETECTOR
-    REGISTRY --> FUNC_DETECTOR
-    SOURCE --> ANALYZER
-    FUNC_DETECTOR --> ISSUES
-    IMPORT_DETECTOR --> ISSUES
-    GOROUTINE_DETECTOR --> ISSUES
-    CHANNEL_DETECTOR --> ISSUES
-```
 
 ### Architectural Layers
 

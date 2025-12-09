@@ -45,5 +45,7 @@ Open Settings (File → Preferences → Settings) and search for `cadenceLinter`
 
 If you find a bug or need help, open an issue on the repository and include the CLI output from the extension output channel.
 
+Documentation and architecture overview: see `Documentation/Overview.md` in the repository root.
+
 ---
 _Created by Anthony Nguyen (anthonyking10a@gmail.com)_

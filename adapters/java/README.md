@@ -1,20 +1,35 @@
 Java adapter (adapters/java)
 
-This is a minimal sample Java adapter for the cadence-workflow-linter project.
 
-It provides a tiny, demonstration `ScanFile` / `ScanDirectory` API that returns
-the language-agnostic `core.Issue` items so the CLI or other tooling can
-consume results the same way as the Go adapter does.
+This adapter performs light-weight static analysis of Java sources. It:
 
-This adapter is intentionally small: it performs a simple text scan for
-calls that look like `Instant.now(` or `System.currentTimeMillis(` and emits
-an issue for each occurrence. It is meant to be a starting point for a full
-Java analyzer implementation.
+- Recognises classes and methods and looks for Cadence/Temporal annotations such as
+  `@WorkflowMethod` and `@WorkflowInterface`.
+- Builds a simple intra-file call graph and computes reachability from methods
+  marked as workflow entry points.
+- Flags uses of `java.time.Instant.now()` and `System.currentTimeMillis()` when they
+  appear in methods reachable from workflow entry points (including helper methods).
+
+Limitations
+-----------
+- This is a pragmatic, file-scoped analyzer (no cross-file or cross-package call graph).
+- It uses regex-based parsing and heuristics; a future improvement is an AST-based
+  Java parser (tree-sitter or javaparser) for more accurate detection.
+
+The tests under `adapters/java/tests/testdata/` include a `WorkflowExample.java` which
+demonstrates detection in a helper method called from a workflow method.
+
 
 Usage (example):
 
-  import "github.com/afony10/cadence-workflow-linter/adapters/java/analyzer"
+  import (
+      "github.com/afony10/cadence-workflow-linter/adapters/java/analyzer"
+      "github.com/afony10/cadence-workflow-linter/config"
+  )
 
-  issues, err := analyzer.ScanDirectory("./my-java-project")
+  rules, _ := config.LoadRules("config/rules.yaml")
+  issues, err := analyzer.ScanDirectory("./my-java-project", rules)
 
-The returned `[]core.Issue` can be passed to the existing emitters.
+The returned `[]core.Issue` can be passed to the existing emitters. Note that the
+CLI already loads `config/rules.yaml` and passes the shared RuleSet into the Java
+adapter, ensuring top-level configuration changes apply to all adapters.
