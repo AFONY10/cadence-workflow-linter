@@ -110,8 +110,8 @@ func scanFiles(paths []string, rules *config.RuleSet) ([]core.Issue, error) {
 									typeSegments := strings.Split(typePart, ".")
 									simpleType := typeSegments[len(typeSegments)-1]
 
-									if matchesPattern(pattern.pkg, simpleType, methodName, pattern) {
-										callee := fmt.Sprintf("%s.%s.%s", pattern.pkg, simpleType, methodName)
+									if matchesPattern(typePart, simpleType, methodName, pattern) {
+										callee := fmt.Sprintf("%s.%s", typePart, methodName)
 										mi.Matches[pattern.ruleID] = append(mi.Matches[pattern.ruleID], matchInfo{
 											line:    absLine,
 											callee:  callee,
@@ -130,8 +130,8 @@ func scanFiles(paths []string, rules *config.RuleSet) ([]core.Issue, error) {
 									// Check if pattern is looking for constructor calls
 									for _, methodName := range pattern.methods {
 										if strings.EqualFold(methodName, "new") || strings.EqualFold(methodName, typeName) {
-											if matchesPattern(pattern.pkg, typeName, methodName, pattern) {
-												callee := fmt.Sprintf("%s.%s", pattern.pkg, typeName)
+											if matchesPattern(typeName, typeName, methodName, pattern) {
+												callee := fmt.Sprintf("%s.%s", typeName, methodName)
 												mi.Matches[pattern.ruleID] = append(mi.Matches[pattern.ruleID], matchInfo{
 													line:    absLine,
 													callee:  callee,
